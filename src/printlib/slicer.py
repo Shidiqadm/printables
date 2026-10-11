@@ -60,6 +60,45 @@ class SliceResult:
         return f"{h}h{m:02d}m, {self.grams:.1f} g over {self.plates} plate(s) -> {self.output}"
 
 
+# Keys the Bambu Studio GUI writes from its device/UI state but the headless CLI leaves empty
+# or omits. Without them the GUI rejects the project config ("invalid config, load geometry
+# data only"). Values match projects saved by the GUI for an A1 with AMS lite.
+GUI_STATE = {
+    "extruder_ams_count": ["1#0|4#0", "1#0|4#0"],
+    "extruder_nozzle_stats": ["Standard#1"],
+    "host_type": "octoprint",
+    "printhost_authorization_type": "key",
+    "printhost_ssl_ignore_revoke": "0",
+}
+
+
+def _make_gui_loadable(path: Path, process: str, overrides: dict) -> None:
+    """Patch the sliced project's settings so the GUI loads them, not just the geometry."""
+    with zipfile.ZipFile(path) as z:
+        entries = {i.filename: z.read(i.filename) for i in z.infolist()}
+    name = "Metadata/project_settings.config"
+    cfg = json.loads(entries[name])
+    for key, value in GUI_STATE.items():
+        if not cfg.get(key):
+            cfg[key] = value
+    colours = cfg.get("filament_colour", ["#FFFFFF"])
+    cfg.setdefault("filament_colour_type", ["0"] * len(colours))
+    cfg.setdefault("filament_multi_colour", list(colours))
+    # record which process values differ from the system preset, as the GUI does
+    system = profile("process", process)
+    changed = sorted(k for k, v in overrides.items() if str(system.get(k)) != str(v))
+    diff = list(cfg.get("different_settings_to_system", ["", "", ""]))
+    if diff:
+        diff[0] = ";".join(changed)
+        cfg["different_settings_to_system"] = diff
+    entries[name] = json.dumps(cfg, indent=4).encode()
+    tmp = path.with_suffix(".tmp")
+    with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as z:
+        for fname, data in entries.items():
+            z.writestr(fname, data)
+    tmp.replace(path)
+
+
 def slice_model(
     model: Path | list[tuple[Path, int]],
     process: str = PROCESS,
@@ -104,6 +143,7 @@ def slice_model(
             raise RuntimeError(f"Bambu Studio slicing failed ({run.returncode}):\n{tail}")
     for stray in [out_dir / "result.json", *out_dir.glob("plate_*.gcode")]:
         stray.unlink(missing_ok=True)        # CLI side files; everything is inside the 3MF
+    _make_gui_loadable(out, process, proc_over)
     with zipfile.ZipFile(out) as z:
         info = z.read("Metadata/slice_info.config").decode()
     seconds = sum(float(x) for x in re.findall(r'key="prediction" value="([\d.]+)"', info))

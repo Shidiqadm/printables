@@ -91,6 +91,24 @@ def run(name: str) -> None:
             slot_case(f"t{delta:+.1f} medallion     ", mb, mr, edge, delta)
     expect(CLEAR > THICK_TOL and abs(TS - T_SHELF - CLEAR) < 1e-9, f"slot {TS:.2f} for {T_SHELF}±{THICK_TOL}")
 
+    if getattr(style, "HAS_MID", False):
+        mbody, mribs, _ = style.mid_hub()
+        print("middle hub slots:")
+        for delta in (-THICK_TOL, 0.0, THICK_TOL):
+            t_shelf, t_side = T_SHELF + delta, T_SIDE + delta
+            for sign in (1, -1):
+                def at(x0, w, z0, h):
+                    x = x0 if sign > 0 else -x0 - w
+                    return Pos(x, 0, z0) * Box(w, depth + 10, h, align=(Align.MIN,) * 3)
+                tag = f"t{delta:+.1f} mid {'right' if sign > 0 else 'left '}"
+                slot_case(f"{tag} shelf     ", mbody, mribs, at(X1, LONG, 0, t_shelf), delta)
+                slot_case(f"{tag} side below", mbody, mribs, at(X1, t_side, -LONG, LONG), delta)
+                slot_case(f"{tag} side above", mbody, mribs, at(X1, t_side, T_SHELF, LONG), delta)
+        mp = style.mid_plug()
+        expect(overlap(mbody, mp)[0] < EPS, "mid plug vs body: no overlap")
+        _, dr = overlap(mribs, mp)
+        expect(abs(dr - CRUSH) < 0.02, f"mid plug crush depth {dr:.3f} (expected {CRUSH:.2f})")
+
     pl = style.plug()
     vb, _ = overlap(body, pl)
     expect(vb < EPS, f"plug vs body: overlap {vb:.4f} mm3")
@@ -102,6 +120,9 @@ def run(name: str) -> None:
     print("assembly:")
     bodies, gold, tiles = assembly(name)
     others = list(bodies.items())
+    def kind(n: str) -> str:
+        return "hub" if n.startswith(("hub", "mid")) else "plug" if n.startswith(("plug", "mplug")) else "trim"
+
     for pname, p in bodies.items():
         grips = 0
         for oname, o in list(tiles.items()) + [(k, v) for k, v in others if k != pname]:
@@ -110,19 +131,22 @@ def run(name: str) -> None:
             v, d = overlap(p, o)
             if v < EPS:
                 continue
-            if pname.startswith("plug") and oname in tiles:
+            if kind(pname) == "plug" and oname in tiles:
                 expect(False, f"{pname} touches tile {oname}")
-            if oname not in tiles and not (pname.startswith("hub") and oname.startswith("plug")) \
-                    and not (pname.startswith("plug") and oname.startswith("hub")):
+            if oname not in tiles and {kind(pname), kind(oname)} != {"hub", "plug"}:
                 expect(False, f"{pname} clashes with {oname}")
             if d > PROTRUDE + 0.01:
                 expect(False, f"{pname} clashes with {oname}: depth {d:.2f} mm, {v:.1f} mm3")
             grips += 1
-        if pname.startswith("hub"):
+        if kind(pname) == "hub":
             i = int(pname[3])
-            want = 4 if 0 < i < CUBES else 3          # end hubs: 2 tiles + plug
+            end = i in (0, CUBES)
+            if pname.startswith("mid"):               # shelf + side below + side above, per cube
+                want = 4 if end else 6
+            else:
+                want = 3 if end else 4                # end hubs: 2 tiles + plug
             expect(grips == want, f"{pname} grips {grips} pieces (expected {want})")
-        elif not pname.startswith("plug"):
+        elif kind(pname) == "trim":
             expect(grips == 1, f"{pname} grips {grips} tile(s) (expected 1)")
     for gname, g in gold.items():
         hits = [t for t, tile in tiles.items() if boxes_touch(g, tile) and overlap(g, tile)[0] > EPS]

@@ -61,6 +61,12 @@ class Hub:
     def depth(self) -> float:   # slot depth along Y
         return self.size - FRONT
 
+    @property
+    def mid_top(self) -> float:
+        """Top of a middle (stacking) hub: the side-tile clamp mirrored above the shelf slot."""
+        return TS - self.zbot
+
+
 PROFILE_PLANE = Plane(origin=(0, 0, 0), x_dir=(1, 0, 0), z_dir=(0, -1, 0))  # (u,v) -> (X,0,Z)
 
 
@@ -76,21 +82,29 @@ def near(sketch: Sketch, points: list[tuple[float, float]], tol: float = 1e-3):
     ]
 
 
-def channel(hub: Hub, sign: int) -> Sketch:
-    """L-shaped channel for one cube: top tile (horizontal) + side tile (vertical)."""
+def channel(hub: Hub, sign: int, mid: bool = False) -> Sketch:
+    """Channel for one cube: shelf tile (horizontal) + side tile below (an L).
+
+    mid=True adds the upper row's side tile above the shelf tile (a T on its side).
+    """
     ch = rect(X1, hub.h2 + 1, 0, TS) + rect(X1, X2, hub.zbot - 5, 0)
+    if mid:
+        ch += rect(X1, X2, 0, hub.mid_top + 5)
     return mirror(ch, about=Plane.YZ) if sign < 0 else ch
 
 
-def profile(hub: Hub, outline: Sketch) -> Sketch:
+def profile(hub: Hub, outline: Sketch, mid: bool = False) -> Sketch:
     """Cut both channels out of a hub outline and chamfer their mouths."""
-    prof = outline - channel(hub, 1) - channel(hub, -1)
+    prof = outline - channel(hub, 1, mid) - channel(hub, -1, mid)
     mouths = []
     for s in (1, -1):
         mouths += [(s * hub.h2, TS), (s * hub.h2, 0)]
-    bottom = prof.vertices().sort_by(Axis.Y)[0].Y
+    ends = [prof.vertices().sort_by(Axis.Y)[0].Y]
+    if mid:
+        ends.append(prof.vertices().sort_by(Axis.Y)[-1].Y)
     for s in (1, -1):
-        mouths += [(s * X1, bottom), (s * X2, bottom)]
+        for z in ends:
+            mouths += [(s * X1, z), (s * X2, z)]
     return chamfer(near(prof, mouths), LEAD)
 
 
@@ -105,17 +119,23 @@ def crush_rib_y(wall: tuple[float, float], n: tuple[float, float], depth: float)
     return straight + loft([start, end], ruled=True)
 
 
-def hub_body(hub: Hub, outline: Sketch, depth: float | None = None) -> tuple[Part, Part]:
-    """Return (body, crush_ribs) for a hub with the given outside outline (XZ sketch)."""
+def hub_body(hub: Hub, outline: Sketch, depth: float | None = None,
+             mid: bool = False) -> tuple[Part, Part]:
+    """Return (body, crush_ribs) for a hub with the given outside outline (XZ sketch).
+
+    mid=True: middle hub between two stacked rows. The lower row's top tile is the upper
+    row's floor; side tiles enter from below and above, and the corner blocks above the
+    shelf tile replace the cap.
+    """
     depth = hub.depth if depth is None else depth
-    body = extrude(PROFILE_PLANE * profile(hub, outline), amount=-depth)   # +Y, into the shelf
+    body = extrude(PROFILE_PLANE * profile(hub, outline, mid), amount=-depth)   # +Y, into the shelf
     body += extrude(PROFILE_PLANE * outline, amount=FRONT)            # solid front, -Y
 
     def on_slot(e: Edge) -> bool:
         m = e.center()
         x = abs(m.X)
         cap_or_block = (abs(m.Z - TS) < 1e-3 or abs(m.Z) < 1e-3) and x > X1 + 1e-3
-        side_faces = (abs(x - X1) < 1e-3 or abs(x - X2) < 1e-3) and m.Z < -1e-3
+        side_faces = (abs(x - X1) < 1e-3 or abs(x - X2) < 1e-3) and (m.Z < -1e-3 or (mid and m.Z > TS + 1e-3))
         return cap_or_block or side_faces
 
     back = body.edges().filter_by_position(Axis.Y, depth - 1e-3, depth + 1e-3)
@@ -123,16 +143,23 @@ def hub_body(hub: Hub, outline: Sketch, depth: float | None = None) -> tuple[Par
 
     ribs = []
     for s in (1, -1):
-        for x in (X1 + 3.0, hub.h2 - 4.0):                   # cap underside, pushing down
+        # shelf tile: pushed down from the cap, or (mid) from the upper corner block
+        cap_xs = (X2 + 2.0, hub.h2 - 3.0) if mid else (X1 + 3.0, hub.h2 - 4.0)
+        for x in cap_xs:
             ribs.append(crush_rib_y((s * x, TS), (0, -1), depth))
-        for z in (-6.0, hub.zbot + 5.0):                      # corner-block face, pushing in
+        side_zs = [-6.0, hub.zbot + 5.0]                      # corner-block face, pushing in
+        if mid:
+            side_zs += [TS + 6.0, hub.mid_top - 5.0]
+        for z in side_zs:
             ribs.append(crush_rib_y((s * X2, z), (-s, 0), depth))
     return body, Part(Compound(ribs).fuse())
 
 
-def plug_body(hub: Hub) -> Part:
+def plug_body(hub: Hub, mid: bool = False) -> Part:
     """Fills the right-hand channel (nominal tile thickness, so the ribs grip it)."""
     prof = rect(X1, hub.h2, 0, T_SHELF) + rect(X1, X1 + T_SIDE, hub.zbot, 0)
+    if mid:
+        prof += rect(X1, X1 + T_SIDE, 0, hub.mid_top)
     p = extrude(PROFILE_PLANE * prof, amount=-hub.depth)
     ends = p.edges().filter_by_position(Axis.Y, -1e-3, 1e-3) + \
         p.edges().filter_by_position(Axis.Y, hub.depth - 1e-3, hub.depth + 1e-3)

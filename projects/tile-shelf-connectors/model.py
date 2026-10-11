@@ -34,6 +34,7 @@ TILE_W = 300.0            # top/bottom tile length along the row
 TILE_D = 300.0            # shelf depth (tile size front to back)
 SIDE_H = 300.0            # side tile height
 CUBES = 3
+ROWS = 2                  # rows stacked with middle hubs (styles that have them)
 
 PITCH = TILE_W + COLUMN   # hub spacing along the row
 TRIM_LEN = deco.trim_half_length(PITCH)
@@ -55,15 +56,29 @@ def fit_test(style: ModuleType) -> Part:
     return (body + ribs) & keep
 
 
-def assembly(name: str) -> tuple[dict[str, Part], dict[str, Part], dict[str, Part]]:
-    """(plastic bodies, relief bodies, tiles) of a CUBES-wide row in the shelf frame."""
+def assembly(name: str, rows: int | None = None) -> tuple[dict[str, Part], dict[str, Part], dict[str, Part]]:
+    """(plastic bodies, relief bodies, tiles) of a CUBES-wide shelf in the shelf frame.
+
+    rows > 1 stacks rows: middle hubs join them and each row's top tile is the next row's
+    floor. Styles without a middle hub are always one row.
+    """
     style = STYLES[name]
+    rows = (ROWS if rows is None else rows) if getattr(style, "HAS_MID", False) else 1
     hb, hr, hrel = style.hub()
     hub_solid = hb + hr
     pl = style.plug()
     pl_left = mirror(pl, about=Plane.YZ)
     z0 = ZTOP + style.CROWN       # bottom tile top face (hub foot below it)
-    zt = z0 + SIDE_H              # side tile top edge
+    floors = [z0]                 # top face of each row's floor tile
+    for _ in range(rows - 1):
+        floors.append(floors[-1] + SIDE_H + T_SHELF)
+    zt = floors[-1] + SIDE_H      # top row's side tile top edge
+    if rows > 1:
+        mb_, mr_, _ = style.mid_hub()
+        mid_solid = mb_ + mr_
+        mpl = style.mid_plug()
+        mpl_left = mirror(mpl, about=Plane.YZ)
+
     bodies: dict[str, Part] = {}
     relief: dict[str, Part] = {}
     for i in range(CUBES + 1):
@@ -78,6 +93,15 @@ def assembly(name: str) -> tuple[dict[str, Part], dict[str, Part], dict[str, Par
                 bodies[f"plug{i}{tag}"] = place * (pl_left if tag in ("FT", "BB") else pl)
             elif i == CUBES:
                 bodies[f"plug{i}{tag}"] = place * (pl if tag in ("FT", "BB") else pl_left)
+        for r in range(rows - 1):
+            z = floors[r] + SIDE_H        # shelf tile between row r and r+1 rests here
+            for tag, (y, rot) in (("F", (0.0, None)), ("B", (TILE_D, Rz))):
+                place = Pos(x, y, z) * rot if rot else Pos(x, y, z)
+                bodies[f"mid{i}{r}{tag}"] = place * mid_solid
+                if i == 0:
+                    bodies[f"mplug{i}{r}{tag}"] = place * (mpl_left if tag == "F" else mpl)
+                elif i == CUBES:
+                    bodies[f"mplug{i}{r}{tag}"] = place * (mpl if tag == "F" else mpl_left)
 
     if style.HAS_TRIMS:
         tb, tr, trel = style.trim(TRIM_LEN)
@@ -96,13 +120,18 @@ def assembly(name: str) -> tuple[dict[str, Part], dict[str, Part], dict[str, Par
     for c in range(CUBES):
         xl, xr = c * PITCH + X1, (c + 1) * PITCH - X1
         cx, length = (xl + xr) / 2, xr - xl - 0.1        # a hair short so faces don't coincide
-        tiles[f"top{c}"] = Pos(cx, 0, zt) * Box(length, TILE_D, T_SHELF,
-                                               align=(Align.CENTER, Align.MIN, Align.MIN))
-        tiles[f"bottom{c}"] = Pos(cx, 0, z0) * Box(length, TILE_D, T_SHELF,
-                                                  align=(Align.CENTER, Align.MIN, Align.MAX))
-        for side, xs in (("L", xl), ("R", xr - T_SIDE)):
-            tiles[f"side{c}{side}"] = Pos(xs, 0, z0) * Box(
-                T_SIDE, TILE_D, SIDE_H, align=(Align.MIN, Align.MIN, Align.MIN))
+
+        def slab(z: float, align_z: Align) -> Part:
+            return Pos(cx, 0, z) * Box(length, TILE_D, T_SHELF, align=(Align.CENTER, Align.MIN, align_z))
+
+        tiles[f"bottom{c}"] = slab(z0, Align.MAX)
+        for r in range(rows - 1):
+            tiles[f"shelf{c}{r}"] = slab(floors[r] + SIDE_H, Align.MIN)
+        tiles[f"top{c}"] = slab(zt, Align.MIN)
+        for r, zf in enumerate(floors):
+            for side, xs in (("L", xl), ("R", xr - T_SIDE)):
+                tiles[f"side{c}{r}{side}"] = Pos(xs, 0, zf) * Box(
+                    T_SIDE, TILE_D, SIDE_H, align=(Align.MIN, Align.MIN, Align.MIN))
     return bodies, relief, tiles
 
 
@@ -119,6 +148,10 @@ def build_parts(name: str) -> dict[str, dict[str, Part]]:
         "plug": print_pose({"plug": style.plug()}, on_side=True),
         "fit_test": print_pose({"fit_test": fit_test(style)}, face_up=False),
     }
+    if getattr(style, "HAS_MID", False):
+        mb, mr, _ = style.mid_hub()
+        files["mid_hub"] = print_pose({"body": mb + mr}, face_up=style.HUB_FACE_UP)
+        files["mid_plug"] = print_pose({"mid_plug": style.mid_plug()}, on_side=True)
     if style.HAS_TRIMS:
         tb, tr, trel = style.trim(TRIM_LEN)
         mb, mr, mrel = style.medallion()

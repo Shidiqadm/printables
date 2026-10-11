@@ -23,9 +23,12 @@ There are two styles. Both share the same tile channels and grip (`core.py`), so
 | `<style>/fit_test.3mf` | 10 mm slice of half a hub, to try on real tiles | 1 | 1 |
 | `<style>/hub.3mf` | universal hub (deco: body + gold relief) | 4 × (N + 1) | 16 |
 | `<style>/plug.3mf` | fills the empty channel of each end hub | 8 | 8 |
+| `cube/mid_hub.3mf` | middle hub joining two stacked rows (44 × 44 × 69.5 mm) | 2 × (N + 1) per extra row | 8 |
+| `cube/mid_plug.3mf` | T-shaped plug for the end middle hubs | 4 per extra row | 4 |
 | `deco/trim.3mf` | cornice clip for a tile's front edge, body + gold lines | 4 × N | 12 |
 | `deco/medallion.3mf` | mid-span keystone clip with sunburst, body + gold relief | 2 × N | 6 |
-| tiles | | N top, N bottom, 2N side | 3 + 3 + 6 |
+| tiles, 1 row | | N top, N bottom, 2N side | 3 + 3 + 6 |
+| tiles, R rows | | N × (R + 1) shelf, 2N × R side | 2 rows: 9 shelf + 12 side |
 
 PLA for a 3-cube shelf:
 - **cube:** 581 g and 13 h 27 min, as sliced by Bambu Studio (see below).
@@ -48,6 +51,9 @@ PLA for a 3-cube shelf:
 |------|----------|------|-----|-------|
 | `1_test_plate.gcode.3mf` | thickness gauge + fit test | 28 min | 17 g | once, first |
 | `2_hub_plate.gcode.3mf` | 4 hubs + 2 plugs | 3 h 15 min | 141 g | 4 times |
+| `3_mid_plate.gcode.3mf` | 4 middle hubs + 2 mid plugs (only for stacking) | 4 h 34 min | 208 g | 2 times per extra row |
+
+A 3-cube × 2-row shelf comes to 22 h 34 min and 996 g of PLA. Set `CUBES` and `ROWS` in `model.py`; `print_plan.py` works out the repeats.
 
 The slices assume Bambu PLA Basic. With another PLA, pick that filament in Bambu Studio and re-slice. The time barely changes.
 
@@ -103,8 +109,11 @@ Re-run `model.py cube` and `print_plan.py` after changing tile thickness or `CRU
 1. **Bottom:** lay the bottom tiles in a row, glaze up. Slide hubs onto the front and back corners, cap side down (on deco hubs the crown becomes the plinth). Push a plug into the empty channel of each end hub.
 2. **Sides:** drop each cube's two side tiles straight down into the side slots.
 3. **Top:** lay the top tiles glaze-down and slide on the top hubs (and plugs). Turn the joined top over and lower it onto the side tiles.
-4. **Trims (deco only):** clip trims onto the front edge of every top and bottom tile, with the medallion in the middle. On bottom tiles, the keystone points up.
-5. Lift the shelf from the bottom, never by the top.
+4. **Stacking a second row (cube style):** instead of top hubs on the first row, lay its top tiles and slide on **middle hubs**, with mid plugs at the ends. Each middle hub takes the first row's side tiles from below, the shared shelf tile in the middle, and the second row's side tiles from above. Drop in the second row's side tiles, then finish with normal top hubs.
+   - The first row's top tile is the second row's floor, so the weight still goes tile on tile all the way down.
+   - Keep heavy items on the lower row. If children or pets could climb it, strap it to the wall.
+5. **Trims (deco only):** clip trims onto the front edge of every top and bottom tile, with the medallion in the middle. On bottom tiles, the keystone points up.
+6. Lift the shelf from the bottom, never by the top.
 
 ## Print log
 

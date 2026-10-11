@@ -45,6 +45,7 @@ KEY_STEPS = ((-10.0, 0.0), (-18.0, 8.0), (-28.0, 16.0))  # (bottom Z, width redu
 
 CROWN = CROWN_STEP * len(CROWN_INSETS)
 HAS_TRIMS = True          # cornice trims + medallions belong to this style
+HAS_MID = False           # no stacking hub designed for this style yet
 HUB_FACE_UP = True        # print decorated face up: relief prints as top surfaces
 HUB_HALF_DIAG = math.hypot(H2, ZBOT)  # long enough for rays to reach the silhouette
 

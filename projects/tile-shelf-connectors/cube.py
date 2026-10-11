@@ -2,7 +2,7 @@
 
 Same interface as deco.py, so model.py and test_fit.py can build either style:
     DIMS, silhouette(), hub() -> (body, crush_ribs, relief | None), plug(), CROWN,
-    HAS_TRIMS, HUB_FACE_UP
+    HAS_TRIMS, HUB_FACE_UP, HAS_MID (+ mid_hub(), mid_plug() when True)
 """
 
 from build123d import *
@@ -17,19 +17,23 @@ GROOVE_D = 0.6
 
 CROWN = 0.0               # nothing above the cap
 HAS_TRIMS = False         # the cube style has no cornice trims
+HAS_MID = True            # middle hub + plug for stacking a second row
 HUB_FACE_UP = False       # print front face down: smooth bed finish on the visible face
 
 
-def silhouette() -> Sketch:
-    return fillet(rect(-DIMS.h2, DIMS.h2, DIMS.zbot, ZTOP).vertices(), ROUND)
+def silhouette(mid: bool = False) -> Sketch:
+    top = DIMS.mid_top if mid else ZTOP
+    return fillet(rect(-DIMS.h2, DIMS.h2, DIMS.zbot, top).vertices(), ROUND)
 
 
-def _grooves() -> Part:
+def _grooves(mid: bool = False) -> Part:
     """Grooves where the tile planes meet the front and top faces."""
     cuts = []
+    span = 4 * DIMS.size
     for x in (-X1, X1):                             # front face, vertical
-        cuts.append(Pos(x, -FRONT, 0) * Box(GROOVE_W, 2 * GROOVE_D, 2 * DIMS.size))
-        cuts.append(Pos(x, 0, ZTOP) * Box(GROOVE_W, 3 * DIMS.size, 2 * GROOVE_D))   # top face
+        cuts.append(Pos(x, -FRONT, 0) * Box(GROOVE_W, 2 * GROOVE_D, span))
+        if not mid:                                 # top face (a mid hub has tiles on top)
+            cuts.append(Pos(x, 0, ZTOP) * Box(GROOVE_W, 3 * DIMS.size, 2 * GROOVE_D))
     for z in (0.0, TS):                             # front face, horizontal
         cuts.append(Pos(0, -FRONT, z) * Box(2 * DIMS.size, 2 * GROOVE_D, GROOVE_W))
     return Part(Compound(cuts).fuse())
@@ -45,3 +49,15 @@ def hub() -> tuple[Part, Part, None]:
 
 def plug() -> Part:
     return plug_body(DIMS)
+
+
+def mid_hub() -> tuple[Part, Part, None]:
+    """(body, crush_ribs, None) of the middle hub joining a lower and an upper row."""
+    body, ribs = hub_body(DIMS, silhouette(mid=True), mid=True)
+    face = body.edges().filter_by_position(Axis.Y, -FRONT - 1e-3, -FRONT + 1e-3)
+    body = chamfer(face, EDGE) - _grooves(mid=True)
+    return body, ribs, None
+
+
+def mid_plug() -> Part:
+    return plug_body(DIMS, mid=True)
