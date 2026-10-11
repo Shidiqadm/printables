@@ -3,8 +3,8 @@
 Run:  uv run projects/tile-shelf-connectors/print_plan.py      (after model.py)
 Out:  projects/tile-shelf-connectors/output/cube/print/
         1_test_plate.gcode.3mf   thickness gauge + fit test   (print once, first)
-        2_hub_plate.gcode.3mf    4 hubs + 2 plugs             (print 4x for a 3-cube shelf)
-        3_mid_plate.gcode.3mf    4 middle hubs + 2 mid plugs  (print 2x per extra row)
+        2_hub_plate.gcode.3mf    8 hubs + 4 plugs             (print 2x for a 3-cube shelf)
+        3_mid_plate.gcode.3mf    8 middle hubs + 4 mid plugs  (print 1x per extra row)
 
 Each file is a sliced Bambu Studio project: open it to check, or send it straight to the
 printer. Settings were picked by slicing variants in Bambu Studio (see README):
@@ -36,14 +36,15 @@ OVERRIDES = {
 
 PLATES = {
     "1_test_plate": [(OUT / "thickness_gauge.stl", 1), (OUT / "cube" / "fit_test.stl", 1)],
-    "2_hub_plate": [(OUT / "cube" / "hub.stl", 4), (OUT / "cube" / "plug.stl", 2)],
-    "3_mid_plate": [(OUT / "cube" / "mid_hub.stl", 4), (OUT / "cube" / "mid_plug.stl", 2)],
+    "2_hub_plate": [(OUT / "cube" / "hub.stl", 8), (OUT / "cube" / "plug.stl", 4)],
+    "3_mid_plate": [(OUT / "cube" / "mid_hub.stl", 8), (OUT / "cube" / "mid_plug.stl", 4)],
 }
-# hubs: 4 per joint line (front/back x top/bottom); plugs: 8 at the ends. Each plate = 4 + 2.
+# Per joint line: 4 hubs (front/back x top/bottom) and 2 middle hubs per extra row; plugs sit
+# in the 2 end lines. Each plate holds 8 hubs + 4 plugs, about 3-4 h.
 REPEATS = {
     "1_test_plate": 1,
-    "2_hub_plate": (4 * (CUBES + 1)) // 4,              # top + bottom hubs
-    "3_mid_plate": (2 * (CUBES + 1) * (ROWS - 1)) // 4,  # middle hubs between rows
+    "2_hub_plate": (4 * (CUBES + 1)) // 8,              # top + bottom hubs
+    "3_mid_plate": (2 * (CUBES + 1) * (ROWS - 1)) // 8,  # middle hubs between rows
 }
 
 

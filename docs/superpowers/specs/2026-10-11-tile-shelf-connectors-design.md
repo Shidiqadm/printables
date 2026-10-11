@@ -1,7 +1,7 @@
 # Tile shelf connectors: design spec
 
 **Date:** 2026-10-11
-**Status:** revision 3, implemented: two styles (r2 `cube` and r3 `deco`) on one shared core
+**Status:** revision 5, implemented: two styles (`cube`, `deco`) on one shared core; the cube style is slimmed and stackable
 **Project folder:** `projects/tile-shelf-connectors/`
 
 ## Revision history
@@ -243,3 +243,20 @@ For 3 cubes that is 16 hubs, 8 plugs, 12 trims and 6 medallions: about 1.1 kg of
 - the full assembly: no body clashes, each trim and medallion grips exactly one tile, and the relief never touches a tile.
 
 All of it passes.
+
+## Revision 4: print-time optimisation and stacking (cube style)
+
+- **Hub dimensions are per style:** `core.Hub(size, thick, clamp)`.
+  - `size` sets the front face.
+  - `thick` sets the front-to-back depth, which is the print height.
+  - `clamp` sets how far the side-tile slot reaches.
+- **Print settings (A1, PLA Basic):** 0.28mm Extra Draft preset, 3 walls, 15% grid infill, no supports or brim. These were picked by slicing variants with Bambu Studio's command line (`printlib.slicer`). Print time tracks grams, because PLA melt rate is the limit; speed settings don't matter.
+- **Middle hub** (`mid=True` in `core.channel` / `profile` / `hub_body` / `plug_body`):
+  - The side-tile slots are mirrored above the shelf slot, so the lower row's top tile becomes the upper row's floor.
+  - The upper corner blocks replace the cap. Shelf ribs sit on their underside, and the upper side-tile ribs on their faces.
+  - The end middle hubs take a T-shaped plug.
+- **Slimming (r5):** the cube style uses `Hub(44, thick=20, clamp=24)`, after the user's fit test showed a 10 mm grip holds.
+  - Hubs for a 3×2 shelf: 20.1 h / 864 g → 9.7 h / 381 g.
+  - Whole shelf, test plate included: 22.6 h / 996 g → 10.9 h / 439 g.
+  - Sway stiffness falls to about 30% of the full cube. Cap stress under a 50 N bump is about 11 MPa, against PLA's roughly 50 MPa.
+- **Plates:** 8 hubs + 4 plugs (×2) and 8 middle hubs + 4 middle plugs (×1), each about 3–4 h. The sliced projects are patched with the GUI state keys that Bambu Studio's command line leaves empty.

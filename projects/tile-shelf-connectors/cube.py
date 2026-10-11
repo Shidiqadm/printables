@@ -9,7 +9,10 @@ from build123d import *
 
 from core import FRONT, TS, X1, ZTOP, Hub, hub_body, plug_body, rect
 
-DIMS = Hub(44.0)          # 44 mm cube: ~20% faster to print than 48 with the same slots
+# 44 mm face, only 20 mm front-to-back, side tiles clamped 24 mm: about half the plastic of
+# a full 44 mm cube. The physical fit test showed a short grip holds; tiles are trapped
+# front-to-back by the hubs anyway, so depth mostly buys sway stiffness.
+DIMS = Hub(44.0, thick=20.0, clamp=24.0)
 ROUND = 2.0               # radius on the cube's long edges
 EDGE = 1.0                # chamfer on the front face edges (bed side when printing)
 GROOVE_W = 1.0            # decorative grooves along the tile planes

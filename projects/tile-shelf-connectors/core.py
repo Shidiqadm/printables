@@ -43,11 +43,13 @@ PROTRUDE = CLEAR + CRUSH        # how far a crush rib reaches into its slot
 class Hub:
     """Size-dependent hub dimensions. Each style picks its own cube size."""
 
-    size: float                 # cube edge (without any crown)
+    size: float                 # front face width/height (without any crown)
+    thick: float | None = None  # front-to-back thickness (print height); None = size (a cube)
+    clamp: float | None = None  # how far the side-tile slot reaches; None = fill the cube
 
     def __post_init__(self):
         assert self.h2 - X2 >= 8, f"corner blocks only {self.h2 - X2:.1f} mm: increase size"
-        assert self.zbot < -25, "side tile clamp too short: increase size"
+        assert self.zbot <= -18, "side tile clamp too short"
 
     @property
     def h2(self) -> float:      # half width
@@ -55,11 +57,11 @@ class Hub:
 
     @property
     def zbot(self) -> float:    # bottom of the hub
-        return ZTOP - self.size
+        return -self.clamp if self.clamp else ZTOP - self.size
 
     @property
     def depth(self) -> float:   # slot depth along Y
-        return self.size - FRONT
+        return (self.thick or self.size) - FRONT
 
     @property
     def mid_top(self) -> float:
