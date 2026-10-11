@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "cad-viewer",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": ["run", "python", "-m", "ocp_viewer", "--port", "3939", "--theme", "browser", "--up", "Z", "--reset_camera", "reset"],
+      "port": 3939
+    }
+  ]
+}

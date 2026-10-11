@@ -1,0 +1,12 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Generated model outputs (rebuild with `uv run export-all`)
+output/
+
+# Slicer / OS junk
+*.gcode
+*.gcode.3mf
+.DS_Store

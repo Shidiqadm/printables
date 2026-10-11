@@ -1,0 +1,75 @@
+# Fit tolerances for: Bambu Lab A1 + AMS lite, 0.4 mm nozzle, PLA, 0.20 mm layers.
+#
+# All values are in mm. "clearance" = total diametral gap (hole Ø - shaft Ø),
+# i.e. per-side gap is half of it.
+#
+# STATUS: defaults (uncalibrated). Print calibration/tolerance_coupon and update
+# the [calibration] block plus any values that change.
+
+[calibration]
+calibrated = false
+date = ""
+notes = "Factory defaults. Print calibration/tolerance_coupon to tune."
+
+# Diametral clearance by fit class, for round pegs in round holes (Z-axis holes).
+[fit.round]
+press = 0.10   # needs force / mallet, stays put
+snug  = 0.15   # push in by hand, no wobble
+slip  = 0.25   # slides / rotates freely, minimal play
+loose = 0.40   # drops in, noticeable play
+
+# Same, for flat faces / rectangular keys in slots (XY outer walls are more accurate).
+[fit.linear]
+press = 0.05
+snug  = 0.10
+slip  = 0.20
+loose = 0.35
+
+# Gap for parts printed assembled (print-in-place hinges, captive parts).
+[fit.print_in_place]
+gap = 0.35
+
+# Lid / box mating (per-side gap between lid lip and box wall).
+[fit.lid]
+per_side = 0.15
+
+# Metric fasteners: hole diameters to model (already include printer compensation).
+[holes.M2]
+clearance = 2.4
+tap       = 1.7    # self-tapping screw pilot (plastic screws / thread-forming)
+insert    = 3.2    # heat-set insert hole (typical M2 x 3 insert, check datasheet)
+nut_flats = 4.2    # hex nut trap, across flats (nominal 4.0)
+head      = 4.2    # socket-head counterbore Ø
+
+[holes.M2_5]
+clearance = 2.9
+tap       = 2.1
+insert    = 3.6
+nut_flats = 5.2
+head      = 5.0
+
+[holes.M3]
+clearance = 3.4
+tap       = 2.6
+insert    = 4.0    # common M3 x 4 x 5 inserts; use 4.2 for "short" style if tight
+nut_flats = 5.7    # nominal 5.5
+head      = 6.0    # socket-head counterbore (head Ø 5.5)
+
+[holes.M4]
+clearance = 4.5
+tap       = 3.5
+insert    = 5.6
+nut_flats = 7.2
+head      = 7.5
+
+[holes.M5]
+clearance = 5.5
+tap       = 4.4
+insert    = 6.4
+nut_flats = 8.2
+head      = 9.0
+
+# Magnets (Gridfinity standard 6 x 2 mm disc).
+[magnet.d6x2]
+hole_d = 6.5
+depth  = 2.4
