@@ -73,3 +73,8 @@ head      = 9.0
 [magnet.d6x2]
 hole_d = 6.5
 depth  = 2.4
+
+# 10 x 2 mm disc magnets (KAYO lamp shells). Glue them in; polarity matters.
+[magnet.d10x2]
+hole_d = 10.4
+depth  = 2.2
