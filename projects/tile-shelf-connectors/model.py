@@ -1,90 +1,96 @@
-"""Tile shelf, Art Deco edition: cube hubs, end plugs and cornice trims for a tile shelf.
+"""Tile shelf hubs in two styles: plain grooved cube and Art Deco "skyscraper corner".
 
 Spec:    docs/superpowers/specs/2026-10-11-tile-shelf-connectors-design.md
-Run:     uv run projects/tile-shelf-connectors/model.py
+Run:     uv run projects/tile-shelf-connectors/model.py [cube|deco]   (default: both)
 Test:    uv run projects/tile-shelf-connectors/test_fit.py
-Outputs: projects/tile-shelf-connectors/output/   (all in print orientation)
-           hub.3mf             universal hub, body + gold relief (2 parts)
-           plug.3mf            fills the unused channel of the end hubs
-           trim.3mf            cornice clip for a tile front edge, body + gold lines
-           medallion.3mf       mid-span keystone clip with sunburst, body + gold relief
-           fit_test.3mf        10 mm slice of half a hub, to try on real tiles
-           thickness_gauge.3mf comb to find tile thickness without calipers
+Outputs (print orientation):
+  output/thickness_gauge.3mf   comb to find tile thickness without calipers (shared)
+  output/cube/  hub, plug, fit_test
+  output/deco/  hub, plug, trim, medallion, fit_test   (hub/trim/medallion: body + gold relief)
 
-Files are split by job: core.py = tile channels and grip (tested), deco.py = the Art Deco
-outside, this file = parts, assembly preview and export.
+Files are split by job: core.py = tile channels and grip (shared, tested), cube.py and
+deco.py = the outside of each style, this file = parts, assembly preview and export.
 """
 
 import sys
 from pathlib import Path
+from types import ModuleType
 
 sys.path.insert(0, str(Path(__file__).parent))
 
 from build123d import *  # noqa: E402
 
+import cube  # noqa: E402
 import deco  # noqa: E402
 from core import (  # noqa: E402
-    COLUMN, DEPTH, FRONT, H2, T_SHELF, T_SIDE, X1, hub_body, print_pose, thickness_gauge,
+    COLUMN, FRONT, H2, T_SHELF, T_SIDE, X1, ZTOP, hub_body, print_pose, thickness_gauge,
 )
 from printlib import check, export, preview  # noqa: E402
+
+STYLES: dict[str, ModuleType] = {"cube": cube, "deco": deco}
 
 # Assembly preview only (does not change the hubs; sets the trim length)
 TILE_W = 300.0            # top/bottom tile length along the row
 TILE_D = 300.0            # shelf depth (tile size front to back)
 SIDE_H = 300.0            # side tile height
 CUBES = 3
-TRIMS = True              # cornice trims + medallions on top and bottom tile edges
 
 PITCH = TILE_W + COLUMN   # hub spacing along the row
 TRIM_LEN = deco.trim_half_length(PITCH)
 
-BODY_COLOR, GOLD, TILE_COLOR = "#1d1d1f", "#c9a227", "#ece8df"
+COLORS = {
+    "cube": {"body": "#c8642d", "relief": "#c8642d"},     # terracotta, like the reference
+    "deco": {"body": "#1d1d1f", "relief": "#c9a227"},     # matte black + silk gold
+}
+TILE_COLOR = "#ece8df"
 
 Rz, Rx, Ry = Rot(0, 0, 180), Rot(180, 0, 0), Rot(0, 180, 0)
 POSES = {"FT": (0.0, None), "BT": (TILE_D, Rz), "FB": (0.0, Ry), "BB": (TILE_D, Rx)}
 
 
-def fit_test() -> Part:
-    """Right half of a plain hub (column + one channel), 10 mm deep: tests both slots."""
-    body, ribs = hub_body(deco.silhouette(), depth=10.0)
+def fit_test(style: ModuleType) -> Part:
+    """Right half of a hub (column + one channel), 10 mm deep: tests both slots."""
+    body, ribs = hub_body(style.silhouette(), depth=10.0)
     keep = Pos(-X1, -FRONT - 1, -100) * Box(H2 + X1 + 1, 30, 200, align=(Align.MIN,) * 3)
     return (body + ribs) & keep
 
 
-def assembly() -> tuple[dict[str, Part], dict[str, Part], dict[str, Part]]:
-    """(plastic bodies, gold relief, tiles) of a CUBES-wide row in the shelf frame."""
-    hb, hr, hrel = deco.hub()
+def assembly(name: str) -> tuple[dict[str, Part], dict[str, Part], dict[str, Part]]:
+    """(plastic bodies, relief bodies, tiles) of a CUBES-wide row in the shelf frame."""
+    style = STYLES[name]
+    hb, hr, hrel = style.hub()
     hub_solid = hb + hr
-    pl = deco.plug()
+    pl = style.plug()
     pl_left = mirror(pl, about=Plane.YZ)
-    z0 = deco.ZTOP + deco.CROWN   # bottom tile top face (hub foot below it)
+    z0 = ZTOP + style.CROWN       # bottom tile top face (hub foot below it)
     zt = z0 + SIDE_H              # side tile top edge
     bodies: dict[str, Part] = {}
-    gold: dict[str, Part] = {}
+    relief: dict[str, Part] = {}
     for i in range(CUBES + 1):
         x = i * PITCH
         for tag, (y, rot) in POSES.items():
             z = zt if tag.endswith("T") else z0
             place = Pos(x, y, z) * rot if rot else Pos(x, y, z)
             bodies[f"hub{i}{tag}"] = place * hub_solid
-            gold[f"hub{i}{tag}"] = place * hrel
+            if hrel is not None:
+                relief[f"hub{i}{tag}"] = place * hrel
             if i == 0:
                 bodies[f"plug{i}{tag}"] = place * (pl_left if tag in ("FT", "BB") else pl)
             elif i == CUBES:
                 bodies[f"plug{i}{tag}"] = place * (pl if tag in ("FT", "BB") else pl_left)
 
-    if TRIMS:
-        tb, tr, trel = deco.trim(TRIM_LEN)
-        mb, mr, mrel = deco.medallion()
+    if style.HAS_TRIMS:
+        tb, tr, trel = style.trim(TRIM_LEN)
+        mb, mr, mrel = style.medallion()
         pieces = {"trimL": (tb + tr, trel, -1), "medal": (mb + mr, mrel, 0), "trimR": (tb + tr, trel, 1)}
-        offset = deco.MEDALLION_W / 2 + deco.TRIM_GAP + TRIM_LEN / 2
+        offset = style.MEDALLION_W / 2 + style.TRIM_GAP + TRIM_LEN / 2
         for c in range(CUBES):
             cx = (c + 0.5) * PITCH
-            for name, (b, r, side) in pieces.items():
+            for pname, (b, r, side) in pieces.items():
                 x = cx + side * offset
                 for level, place in (("top", Pos(x, 0, zt)), ("bot", Pos(x, 0, z0) * Ry)):
-                    bodies[f"{name}{c}{level}"] = place * b
-                    gold[f"{name}{c}{level}"] = place * r
+                    bodies[f"{pname}{c}{level}"] = place * b
+                    relief[f"{pname}{c}{level}"] = place * r
 
     tiles: dict[str, Part] = {}
     for c in range(CUBES):
@@ -94,35 +100,55 @@ def assembly() -> tuple[dict[str, Part], dict[str, Part], dict[str, Part]]:
                                                align=(Align.CENTER, Align.MIN, Align.MIN))
         tiles[f"bottom{c}"] = Pos(cx, 0, z0) * Box(length, TILE_D, T_SHELF,
                                                   align=(Align.CENTER, Align.MIN, Align.MAX))
-        for name, xs in (("L", xl), ("R", xr - T_SIDE)):
-            tiles[f"side{c}{name}"] = Pos(xs, 0, z0) * Box(
+        for side, xs in (("L", xl), ("R", xr - T_SIDE)):
+            tiles[f"side{c}{side}"] = Pos(xs, 0, z0) * Box(
                 T_SIDE, TILE_D, SIDE_H, align=(Align.MIN, Align.MIN, Align.MIN))
-    return bodies, gold, tiles
+    return bodies, relief, tiles
 
 
-def build_parts() -> dict[str, dict[str, Part]]:
-    """Every printable file, as {file: {part: shape}} in print orientation."""
-    hb, hr, hrel = deco.hub()
-    tb, tr, trel = deco.trim(TRIM_LEN)
-    mb, mr, mrel = deco.medallion()
-    return {
-        "hub": print_pose({"body": hb + hr, "relief": hrel}, face_up=True),
-        "plug": print_pose({"plug": deco.plug()}, face_up=False),
-        "trim": print_pose({"body": tb + tr, "relief": trel}, face_up=True),
-        "medallion": print_pose({"body": mb + mr, "relief": mrel}, face_up=True),
-        "fit_test": print_pose({"fit_test": fit_test()}, face_up=False),
-        "thickness_gauge": {"thickness_gauge": thickness_gauge()},
+def build_parts(name: str) -> dict[str, dict[str, Part]]:
+    """Every printable file of one style, as {file: {part: shape}} in print orientation."""
+    style = STYLES[name]
+
+    def two_tone(body: Part, relief: Part | None) -> dict[str, Part]:
+        return {"body": body} if relief is None else {"body": body, "relief": relief}
+
+    hb, hr, hrel = style.hub()
+    files = {
+        "hub": print_pose(two_tone(hb + hr, hrel), face_up=style.HUB_FACE_UP),
+        "plug": print_pose({"plug": style.plug()}, face_up=False),
+        "fit_test": print_pose({"fit_test": fit_test(style)}, face_up=False),
     }
+    if style.HAS_TRIMS:
+        tb, tr, trel = style.trim(TRIM_LEN)
+        mb, mr, mrel = style.medallion()
+        files["trim"] = print_pose(two_tone(tb + tr, trel), face_up=True)
+        files["medallion"] = print_pose(two_tone(mb + mr, mrel), face_up=True)
+    return files
+
+
+def export_style(name: str, out_root: Path) -> None:
+    for fname, pieces in build_parts(name).items():
+        for pname, p in pieces.items():
+            if pname != "relief":          # relief floats on the body's top face by design
+                check(p, f"{name}/{fname}/{pname}")
+        export(pieces if len(pieces) > 1 else next(iter(pieces.values())), fname,
+               out_dir=out_root / name)
+
+
+def show(name: str) -> None:
+    bodies, relief, tiles = assembly(name)
+    c = COLORS[name]
+    preview(*bodies.values(), *relief.values(), *tiles.values(),
+            names=list(bodies) + [f"{k}_relief" for k in relief] + list(tiles),
+            colors=[c["body"]] * len(bodies) + [c["relief"]] * len(relief) + [TILE_COLOR] * len(tiles))
 
 
 if __name__ == "__main__":
-    for fname, pieces in build_parts().items():
-        for pname, p in pieces.items():
-            if pname != "relief":          # relief floats on the body's top face by design
-                check(p, f"{fname}/{pname}")
-        export(pieces if len(pieces) > 1 else next(iter(pieces.values())), fname)
+    out_root = Path(__file__).parent / "output"
+    chosen = [a for a in sys.argv[1:] if a in STYLES] or list(STYLES)
+    export(thickness_gauge(), "thickness_gauge", out_dir=out_root)
+    for name in chosen:
+        export_style(name, out_root)
     print(f"[info] trim length for {TILE_W:g} mm tiles: {TRIM_LEN:.1f} mm")
-    bodies, gold, tiles = assembly()
-    preview(*bodies.values(), *gold.values(), *tiles.values(),
-            names=[f"{k}" for k in bodies] + [f"{k}_gold" for k in gold] + list(tiles),
-            colors=[BODY_COLOR] * len(bodies) + [GOLD] * len(gold) + [TILE_COLOR] * len(tiles))
+    show(chosen[-1])

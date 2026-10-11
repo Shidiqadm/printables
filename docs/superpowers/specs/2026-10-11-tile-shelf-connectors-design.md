@@ -1,7 +1,7 @@
 # Tile shelf connectors: design spec
 
 **Date:** 2026-10-11
-**Status:** revision 3 (Art Deco styling on the r2 cube hub), implemented
+**Status:** revision 3, implemented: two styles (r2 `cube` and r3 `deco`) on one shared core
 **Project folder:** `projects/tile-shelf-connectors/`
 
 ## Revision history
@@ -10,7 +10,7 @@
   - Replaced at the user's request with a heavy-duty cube hub like the reference photos.
   - Review also found a flaw in r1: its lower jaws were joined to the rest only through the 3 mm front plate.
 - **r2:** universal cube hub, double side walls, filler plug, grooved faces.
-- **r3:** Art Deco styling. The user asked for "an art piece which also works as a functional print". The r2 functional core is unchanged (see the "Revision 3" section below); r2's grooved look is replaced.
+- **r3:** Art Deco styling. The user asked for "an art piece which also works as a functional print". The r2 functional core is unchanged (see the "Revision 3" section below). At the user's request, the r2 grooved cube is kept alongside it as the `cube` style.
 
 ## Goal
 
@@ -191,8 +191,11 @@ Stacking, back panels, coffee table variant, flush top surface. The universal hu
 | File | Contents |
 |------|----------|
 | `core.py` | Tile channels, crush ribs, plug body, thickness gauge. Unchanged r2 geometry; it takes any outline. |
-| `deco.py` | Silhouette, relief, plug, trim and medallion. |
-| `model.py` | Parts, assembly and export. |
+| `cube.py` | The r2 grooved cube style. |
+| `deco.py` | Art Deco style: silhouette, relief, plug, trim and medallion. |
+| `model.py` | Builds either style or both (`output/cube/`, `output/deco/`), plus assembly and export. |
+
+Each style module exposes the same interface: `silhouette()`, `hub()`, `plug()`, `CROWN`, `HAS_TRIMS` and `HUB_FACE_UP`. `test_fit.py` runs every check for every style.
 
 ### Hub ("skyscraper corner")
 

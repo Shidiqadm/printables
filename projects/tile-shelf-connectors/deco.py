@@ -1,5 +1,7 @@
 """Art Deco styling for the tile shelf: "skyscraper corner" hub, end plugs, cornice trims.
 
+Same interface as cube.py: silhouette(), hub(), plug(), CROWN, HAS_TRIMS, HUB_FACE_UP.
+
 Only the outside changes; the tile channels and crush ribs come from core.py untouched.
 
 Hub:  stepped crown on the cap (a stepped plinth when the hub is flipped to the bottom),
@@ -43,6 +45,8 @@ MEDALLION_W = 36.0        # medallion width
 KEY_STEPS = ((-10.0, 0.0), (-18.0, 8.0), (-28.0, 16.0))  # (bottom Z, width reduction)
 
 CROWN = CROWN_STEP * len(CROWN_INSETS)
+HAS_TRIMS = True          # cornice trims + medallions belong to this style
+HUB_FACE_UP = True        # print decorated face up: relief prints as top surfaces
 HUB_HALF_DIAG = math.hypot(H2, ZBOT)  # long enough for rays to reach the silhouette
 
 
