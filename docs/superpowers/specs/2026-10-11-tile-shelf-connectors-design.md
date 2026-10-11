@@ -1,7 +1,7 @@
 # Tile shelf connectors: design spec
 
 **Date:** 2026-10-11
-**Status:** revision 2 (cube hub), implemented
+**Status:** revision 3 (Art Deco styling on the r2 cube hub), implemented
 **Project folder:** `projects/tile-shelf-connectors/`
 
 ## Revision history
@@ -9,7 +9,8 @@
 - **r1, approach B:** shared side tile, thin T/L profile connectors.
   - Replaced at the user's request with a heavy-duty cube hub like the reference photos.
   - Review also found a flaw in r1: its lower jaws were joined to the rest only through the 3 mm front plate.
-- **r2, this document:** universal cube hub, double side walls, filler plug, grooved faces.
+- **r2:** universal cube hub, double side walls, filler plug, grooved faces.
+- **r3:** Art Deco styling. The user asked for "an art piece which also works as a functional print". The r2 functional core is unchanged (see the "Revision 3" section below); r2's grooved look is replaced.
 
 ## Goal
 
@@ -180,3 +181,62 @@ Assumed tiles: 300×300×8 mm, about 1.7 kg each. A 3-cube row with 10 kg per cu
 ## Out of scope
 
 Stacking, back panels, coffee table variant, flush top surface. The universal hub could later grow extra channels on the top face for stacking.
+
+## Revision 3: Art Deco styling
+
+**Brief:** turn the hub into an art piece without weakening it, and add matching accent pieces. The user picked the Art Deco direction with accents (hubs, plugs, cornice trims and medallions). They left the colours to me: matte black body with silk gold relief.
+
+### Code split
+
+| File | Contents |
+|------|----------|
+| `core.py` | Tile channels, crush ribs, plug body, thickness gauge. Unchanged r2 geometry; it takes any outline. |
+| `deco.py` | Silhouette, relief, plug, trim and medallion. |
+| `model.py` | Parts, assembly and export. |
+
+### Hub ("skyscraper corner")
+
+- **Crown:** two 1.6 mm tiers on the cap, inset 4 mm and 10 mm. Flipped at the bottom, they become a stepped plinth. The bottom tiles now sit 3.2 mm higher.
+- **Corbels:**
+  - The corner blocks' outer faces step in by 2 mm at Z = −9, −18 and −27, like stepped stone brackets.
+  - The block faces that grip the tiles, and the crush ribs, are untouched.
+  - The narrowest block is 5.6 mm, at the bottom, and it is loaded in compression only.
+  - The body is 4 cm³ lighter than r2 (66.9 cm³).
+- **Corners and edges:** convex silhouette corners and the front-face edges get a 0.6 mm chamfer.
+- **Relief:** 1.2 mm raised on the front face, as a separate body for a second filament. It holds a little short of the silhouette edge (`RELIEF_MARGIN` 1.5 mm) and contains:
+  - a 3.2 mm spire up the column, through the crown;
+  - two 0.9 mm speed lines across the tile band (Z = 0.3 and 0.7 × `TS`);
+  - a nine-ray sunburst fan with a half ring, radiating down from where the tiles meet. It becomes a sunrise on the bottom hubs.
+- **Print orientation flips to front face up**, so the relief prints as top surfaces. The colour changes are confined to the last 6 layers of each plate (6 filament swaps on an AMS lite). Channels stay vertical, so no supports are needed. The slot lead-ins at the back mouth now sit on the bed as 45° overhangs, which print fine.
+
+### Plug
+
+The same as r2, plus two speed-line grooves on its outer end face, so the hub's front lines carry on around the corner at the ends of the row.
+
+### Cornice trim and medallion
+
+- **Shape:** a C-section clip on the front edge of a top or bottom tile, between two hubs:
+  - face 4 mm thick, sitting 1 mm behind the hub face;
+  - lips 7 mm deep and 2 mm thick, with 0.8 mm lead-ins;
+  - two crush ribs along X on the upper lip;
+  - the same ±0.3 mm tolerance as the hubs.
+- **Relief:** three gold speed lines.
+- **Length:** each span is cut into two trims and a central medallion with 0.5 mm gaps. That is 111 mm per trim for 300 mm tiles (`trim_half_length(pitch)`), because a full span (260 mm) is longer than the A1 bed.
+- **Medallion:** 36 mm wide, the same clip plus a stepped keystone (widths 36, 28 and 20 mm, hanging 28 mm below the tile edge, solid back to the lip depth so it prints without supports), with a sunburst relief. On bottom tiles it is rotated 180° about Y, so it points up.
+- **Function:** hides and protects the raw tile edges, and adds a stiffening clip to every tile edge.
+- **Printing:** face up. The 8.4 mm channel bridges cleanly.
+
+### Counts for N cubes, with trims on top and bottom
+
+- 4(N+1) hubs and 8 plugs;
+- 4N trims and 2N medallions.
+
+For 3 cubes that is 16 hubs, 8 plugs, 12 trims and 6 medallions: about 1.1 kg of PLA, mostly black, with about 30 g of gold.
+
+### Verification (r3)
+
+`test_fit.py` covers:
+- hub channels, plug, trim and medallion, at nominal and ±0.3 mm thickness;
+- the full assembly: no body clashes, each trim and medallion grips exactly one tile, and the relief never touches a tile.
+
+All of it passes.
