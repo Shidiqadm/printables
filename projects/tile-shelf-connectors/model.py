@@ -1,16 +1,19 @@
-"""Tile shelf connectors: friction-fit corners that turn leftover tiles into a cube shelf.
+"""Tile shelf hubs: heavy-duty cube connectors that turn leftover tiles into a cube shelf.
 
 Spec:    docs/superpowers/specs/2026-10-11-tile-shelf-connectors-design.md
 Run:     uv run projects/tile-shelf-connectors/model.py
+Test:    uv run projects/tile-shelf-connectors/test_fit.py
 Outputs: projects/tile-shelf-connectors/output/
-           middle.3mf, end.3mf, end_mirrored.3mf   the connectors (print orientation)
-           fit_test.3mf                            short middle section to try on real tiles
-           thickness_gauge.3mf                     comb to find tile thickness without calipers
+           hub.3mf              universal cube hub, used at every corner
+           plug.3mf             fills the unused channel of hubs at the ends of the row
+           fit_test.3mf         10 mm slice of half a hub, to try on real tiles
+           thickness_gauge.3mf  comb to find tile thickness without calipers
 
-Coordinates while modelling ("shelf frame"): X along the row, Y = depth (0 = front face
-of the tiles, +Y to the back), Z up. A connector is modelled at the front-top corner of a
-side tile: Z=0 is the side tile's top edge, X=0 its mid-plane. Parts are rotated onto their
-front plate for printing at the very end.
+Shelf frame used while modelling: X along the row, Y = depth (0 = front face of the
+tiles, +Y to the back), Z up. A hub is modelled at the front-top corner between two cubes:
+X=0 is the middle of its centre column, Z=0 is the top edge of the side tiles. Each cube
+has its own two side tiles (double walls); every top tile rests on the full edge of its
+side tiles. Parts are rotated onto their front face for printing at the very end.
 """
 
 from build123d import *
@@ -23,15 +26,15 @@ T_SIDE = 8.0              # side tile thickness
 THICK_TOL = 0.30          # tiles may be this much thinner/thicker than nominal
 CLEAR = THICK_TOL + fit("snug", "linear")   # slot = T + 0.4: a +0.3 tile still slides in
 CRUSH = 0.30              # crush-rib interference at nominal (0 at -TOL, 0.6 at +TOL)
-RIB = 2.0                 # rib separating neighbouring top tiles
-PLATE = A1.wall(8)        # 3.36: jaws and walls, 8 extrusion lines = solid
-CAP = A1.wall(10)         # 4.2: cap over the top tiles (foot under bottom tiles)
-ARM = 28.0                # clamp reach along each tile, beyond the side tile
-DEPTH = 30.0              # how far the connector reaches back along the tile edges
-FRONT = 3.0               # front plate (15 layers)
-EDGE = 1.0                # chamfer on outside corners / visible face
+HUB = 48.0                # cube size
+COLUMN = 8.0              # centre column between the two cubes' side tiles
+CAP = A1.wall(12)         # 5.04: cap over the top tiles (foot under the bottom tiles)
+FRONT = 5.0               # solid front face that ties the blocks together (25 layers)
+ROUND = 2.0               # radius on the cube's long edges
+EDGE = 1.0                # chamfer on front and back face edges (front = bed side)
 LEAD = 1.0                # lead-in chamfer at slot mouths
-GUSSET = 3.0              # fillet in the inside corners where jaws meet (stress relief)
+GROOVE_W = 1.0            # decorative grooves along the tile planes
+GROOVE_D = 0.6
 RIB_R = 2.0               # crush-rib radius (wide, gentle ramp for tiles sliding across)
 RIB_END = 3.0             # crush ribs stop this far before the back mouth...
 RIB_RAMP = 2.0            # ...after ramping down over this length
@@ -43,12 +46,19 @@ SIDE_H = 300.0            # side tile height
 CUBES = 3
 
 # ---- Derived ---------------------------------------------------------------
-TS = T_SHELF + CLEAR            # shelf slot height
-XW = (T_SIDE + CLEAR) / 2       # half width of the side slot
-XJ = XW + PLATE                 # outer face of the side jaws
-U = XW + ARM                    # wing end
-TOP = TS + CAP                  # top of the cap
+TS = T_SHELF + CLEAR            # top-tile slot height
+TW = T_SIDE + CLEAR             # side-tile slot width
+X1 = COLUMN / 2                 # column face = inner face of the side slot
+X2 = X1 + TW                    # corner-block face = outer face of the side slot
+H2 = HUB / 2
+ZTOP = TS + CAP                 # top of the cap
+ZBOT = ZTOP - HUB               # bottom of the hub
+DEPTH = HUB - FRONT             # slot depth along Y
 PROTRUDE = CLEAR + CRUSH        # how far a crush rib reaches into its slot
+PITCH = TILE_W + COLUMN         # hub spacing along the row
+
+assert H2 - X2 >= 8, f"corner blocks only {H2 - X2:.1f} mm: increase HUB"
+assert ZBOT < -25, "side tile clamp too short: increase HUB"
 
 PROFILE_PLANE = Plane(origin=(0, 0, 0), x_dir=(1, 0, 0), z_dir=(0, -1, 0))  # (u,v) -> (X,0,Z)
 
@@ -64,91 +74,102 @@ def _near(sketch: Sketch, points: list[tuple[float, float]], tol: float = 1e-3):
     ]
 
 
-def _outer(kind: str, arm: float) -> Sketch:
-    """Outline of the connector seen from the front, before slots are cut."""
-    u_wing = XW + arm
-    left = -u_wing if kind == "middle" else -XJ
-    shape = _rect(left, u_wing, -PLATE, TOP) + _rect(-XJ, XJ, -arm, TOP)
-    convex = [(u_wing, TOP), (u_wing, -PLATE), (XJ, -arm), (-XJ, -arm), (left, TOP)]
-    concave = [(XJ, -PLATE)]
-    if kind == "middle":
-        convex.append((left, -PLATE))
-        concave.append((-XJ, -PLATE))
-    shape = chamfer(_near(shape, convex), EDGE)
-    return fillet(_near(shape, concave), GUSSET)
+def _outer() -> Sketch:
+    sq = _rect(-H2, H2, ZBOT, ZTOP)
+    return fillet(sq.vertices(), ROUND)
 
 
-def _slots(kind: str, arm: float) -> Sketch:
-    u_wing = XW + arm
-    side = _rect(-XW, XW, -arm - 1, 0)
-    if kind == "middle":
-        return _rect(RIB / 2, u_wing + 1, 0, TS) + _rect(-u_wing - 1, -RIB / 2, 0, TS) + side
-    return _rect(-XW, u_wing + 1, 0, TS) + side
+def _channel(sign: int) -> Sketch:
+    """L-shaped channel for one cube: top tile (horizontal) + side tile (vertical)."""
+    top = _rect(X1, H2 + 1, 0, TS)
+    side = _rect(X1, X2, ZBOT - 1, 0)
+    ch = top + side
+    return mirror(ch, about=Plane.YZ) if sign < 0 else ch
 
 
-def _crush_rib(u: float, v: float, depth: float) -> Part:
-    """Half-round rib along Y whose crest sits at (u, v); ramps into the wall near the mouth."""
-    # centre sits RIB_R behind the crest, on the wall side
-    if abs(v - (TS - PROTRUDE)) < 1e-6:          # on the cap underside, pointing -v
-        c, back = (u, v + RIB_R), (0, PROTRUDE)
-    else:                                         # on the +u side jaw, pointing -u
-        c, back = (u + RIB_R, v), (PROTRUDE, 0)
+def _profile() -> Sketch:
+    prof = _outer() - _channel(1) - _channel(-1)
+    mouths = []
+    for s in (1, -1):
+        mouths += [(s * H2, TS), (s * H2, 0), (s * X1, ZBOT), (s * X2, ZBOT)]
+    return chamfer(_near(prof, mouths), LEAD)
+
+
+def _crush_rib(wall: tuple[float, float], n: tuple[float, float], depth: float) -> Part:
+    """Half-round rib along Y on the wall point `wall`, bulging along unit vector `n`."""
+    cu = wall[0] + n[0] * (PROTRUDE - RIB_R)
+    cv = wall[1] + n[1] * (PROTRUDE - RIB_R)
     full_len = depth - RIB_END - RIB_RAMP
-    straight = extrude(Plane.XZ.offset(0) * Pos(c[0], c[1]) * Circle(RIB_R), amount=-full_len)
-    start = Plane.XZ.offset(-full_len) * Pos(c[0], c[1]) * Circle(RIB_R)
-    end = Plane.XZ.offset(-(full_len + RIB_RAMP)) * Pos(c[0] + back[0], c[1] + back[1]) * Circle(RIB_R)
+    straight = extrude(Plane.XZ * Pos(cu, cv) * Circle(RIB_R), amount=-full_len)
+    start = Plane.XZ.offset(-full_len) * Pos(cu, cv) * Circle(RIB_R)
+    end = Plane.XZ.offset(-(full_len + RIB_RAMP)) * Pos(cu - n[0] * PROTRUDE, cv - n[1] * PROTRUDE) * Circle(RIB_R)
     return straight + loft([start, end], ruled=True)
 
 
-def connector(kind: str = "middle", arm: float = ARM, depth: float = DEPTH) -> tuple[Part, Part]:
-    """Return (body, crush_ribs) in the shelf frame, front-top position.
+def _grooves() -> Part:
+    """Decorative grooves where the tile planes meet the front and top faces."""
+    cuts = []
+    for x in (-X1, X1):                             # front face, vertical
+        cuts.append(Pos(x, -FRONT, 0) * Box(GROOVE_W, 2 * GROOVE_D, 2 * HUB))
+        cuts.append(Pos(x, 0, ZTOP) * Box(GROOVE_W, 3 * HUB, 2 * GROOVE_D))   # top face
+    for z in (0.0, TS):                             # front face, horizontal
+        cuts.append(Pos(0, -FRONT, z) * Box(2 * HUB, 2 * GROOVE_D, GROOVE_W))
+    return Part(Compound(cuts).fuse())
 
-    kind: "middle" (two wings + rib) or "end" (one wing, closed outer wall on -X).
-    """
-    u_wing = XW + arm
-    outline = _outer(kind, arm)
-    profile = outline - _slots(kind, arm)
-    mouths = [(u_wing, TS), (u_wing, 0), (XW, -arm), (-XW, -arm)]
-    if kind == "middle":
-        mouths += [(-u_wing, TS), (-u_wing, 0)]
-    profile = chamfer(_near(profile, mouths), LEAD)
 
-    body = extrude(PROFILE_PLANE * profile, amount=-depth)          # +Y, into the shelf
-    body += extrude(PROFILE_PLANE * outline, amount=FRONT)          # front plate, -Y
+def hub(depth: float = DEPTH) -> tuple[Part, Part]:
+    """Return (body, crush_ribs) in the shelf frame, front-top position."""
+    body = extrude(PROFILE_PLANE * _profile(), amount=-depth)       # +Y, into the shelf
+    body += extrude(PROFILE_PLANE * _outer(), amount=FRONT)         # solid front, -Y
 
-    # lead-in chamfer around the back mouths of the slots
-    back_edges = body.edges().filter_by_position(Axis.Y, depth - 1e-3, depth + 1e-3)
     def on_slot(e: Edge) -> bool:
         m = e.center()
-        horiz = abs(m.Z - TS) < 1e-3 or (abs(m.Z) < 1e-3 and abs(m.X) > XW)
-        vert = abs(abs(m.X) - XW) < 1e-3 and m.Z < 0
-        return horiz or vert
-    body = chamfer([e for e in back_edges if on_slot(e)], LEAD)
-    # visible front face edges (also the bed side, so this hides elephant's foot)
-    body = chamfer(body.edges().filter_by_position(Axis.Y, -FRONT - 1e-3, -FRONT + 1e-3), EDGE)
+        x = abs(m.X)
+        cap_or_block = (abs(m.Z - TS) < 1e-3 or abs(m.Z) < 1e-3) and x > X1 + 1e-3
+        side_faces = (abs(x - X1) < 1e-3 or abs(x - X2) < 1e-3) and m.Z < -1e-3
+        return cap_or_block or side_faces
 
-    rib_v_cap = TS - PROTRUDE
-    if kind == "middle":
-        cap_us = [XW + 3, u_wing - 4, -(XW + 3), -(u_wing - 4)]
-    else:
-        cap_us = [-XW + 3, u_wing - 4]
-    ribs = [_crush_rib(u, rib_v_cap, depth) for u in cap_us]
-    ribs += [_crush_rib(XW - PROTRUDE, v, depth) for v in (-6.0, -(arm - 5.0))]
-    rib_part = Part(Compound(ribs).fuse()) if len(ribs) > 1 else ribs[0]
-    return body, rib_part
+    back = body.edges().filter_by_position(Axis.Y, depth - 1e-3, depth + 1e-3)
+    body = chamfer([e for e in back if on_slot(e)], LEAD)
+    face_edges = body.edges().filter_by_position(Axis.Y, -FRONT - 1e-3, -FRONT + 1e-3)
+    body = chamfer(face_edges, EDGE)
+    body -= _grooves()
 
-
-def solid(kind: str, arm: float = ARM, depth: float = DEPTH, mirrored: bool = False) -> Part:
-    body, ribs = connector(kind, arm, depth)
-    part = body + ribs
-    return mirror(part, about=Plane.YZ) if mirrored else part
+    ribs = []
+    for s in (1, -1):
+        for x in (X1 + 3.0, H2 - 4.0):                       # cap underside, pushing down
+            ribs.append(_crush_rib((s * x, TS), (0, -1), depth))
+        for z in (-6.0, ZBOT + 5.0):                          # corner-block face, pushing in
+            ribs.append(_crush_rib((s * X2, z), (-s, 0), depth))
+    return body, Part(Compound(ribs).fuse())
 
 
-def print_pose(part: Part) -> Part:
-    """Front plate down on the bed, centred on the origin."""
-    p = Rot(90, 0, 0) * part
+def solid_hub(depth: float = DEPTH) -> Part:
+    body, ribs = hub(depth)
+    return body + ribs
+
+
+def plug() -> Part:
+    """Fills the right-hand channel of a hub (nominal tile thickness, so the ribs grip it)."""
+    prof = _rect(X1, H2, 0, T_SHELF) + _rect(X1, X1 + T_SIDE, ZBOT, 0)
+    p = extrude(PROFILE_PLANE * prof, amount=-DEPTH)
+    ends = p.edges().filter_by_position(Axis.Y, -1e-3, 1e-3) + \
+        p.edges().filter_by_position(Axis.Y, DEPTH - 1e-3, DEPTH + 1e-3)
+    return chamfer(ends, 0.5)
+
+
+def print_pose(part: Part, back_down: bool = False) -> Part:
+    """Front face (or back face) down on the bed, centred on the origin."""
+    p = Rot(-90 if back_down else 90, 0, 0) * part
     bb = p.bounding_box()
     return Pos(-bb.center().X, -bb.center().Y, -bb.min.Z) * p
+
+
+def fit_test() -> Part:
+    """Right half of a hub (column + one channel), 10 mm deep: tests both slots cheaply."""
+    half = solid_hub(depth=10.0) & Pos(-X1, -FRONT - 1, ZBOT - 1) * Box(
+        H2 + X1 + 1, 30, HUB + 2, align=(Align.MIN, Align.MIN, Align.MIN))
+    return half
 
 
 # ---- Thickness gauge (find tile thickness without calipers) ---------------
@@ -185,58 +206,45 @@ def thickness_gauge() -> Part:
 
 # ---- Assembly preview ------------------------------------------------------
 Rz, Rx, Ry = Rot(0, 0, 180), Rot(180, 0, 0), Rot(0, 180, 0)
-
-
-def side_positions() -> list[float]:
-    xs = [0.0, TILE_W + RIB / 2 - XW]
-    for _ in range(CUBES - 2):
-        xs.append(xs[-1] + TILE_W + RIB)
-    xs.append(xs[-1] + RIB / 2 + TILE_W - XW)
-    return xs
+POSES = {"FT": (0.0, None), "BT": (TILE_D, Rz), "FB": (0.0, Ry), "BB": (TILE_D, Rx)}
 
 
 def assembly() -> tuple[dict[str, Part], dict[str, Part]]:
-    """Connectors and tiles of a CUBES-wide row, in the shelf frame. Preview/tests only."""
-    mid, end = solid("middle"), solid("end")
-    end_m = solid("end", mirrored=True)
-    z0 = TOP                      # bottom tile top face (foot under it is TOP thick)
+    """Hubs, plugs and tiles of a CUBES-wide row in the shelf frame. Preview/tests only."""
+    h, pl = solid_hub(), plug()
+    pl_left = mirror(pl, about=Plane.YZ)
+    z0 = ZTOP                     # bottom tile top face (the foot under it is ZTOP thick)
     zt = z0 + SIDE_H              # side tile top edge
-    xs = side_positions()
-    conns: dict[str, Part] = {}
-    for i, x in enumerate(xs):
-        if 0 < i < len(xs) - 1:
-            place = {"FT": (0, zt, None, mid), "BT": (TILE_D, zt, Rz, mid),
-                     "FB": (0, z0, Ry, mid), "BB": (TILE_D, z0, Rx, mid)}
-        elif i == 0:
-            place = {"FT": (0, zt, None, end), "BT": (TILE_D, zt, Rz, end_m),
-                     "FB": (0, z0, Ry, end_m), "BB": (TILE_D, z0, Rx, end)}
-        else:
-            place = {"FT": (0, zt, None, end_m), "BT": (TILE_D, zt, Rz, end),
-                     "FB": (0, z0, Ry, end), "BB": (TILE_D, z0, Rx, end_m)}
-        for tag, (y, z, rot, p) in place.items():
-            conns[f"c{i}{tag}"] = Pos(x, y, z) * (rot * p if rot else p)
+    parts: dict[str, Part] = {}
+    for i in range(CUBES + 1):
+        x = i * PITCH
+        for tag, (y, rot) in POSES.items():
+            z = zt if tag.endswith("T") else z0
+            place = Pos(x, y, z) * rot if rot else Pos(x, y, z)
+            parts[f"hub{i}{tag}"] = place * h
+            if i == 0:
+                parts[f"plug{i}{tag}"] = place * (pl_left if tag in ("FT", "BB") else pl)
+            elif i == CUBES:
+                parts[f"plug{i}{tag}"] = place * (pl if tag in ("FT", "BB") else pl_left)
 
     tiles: dict[str, Part] = {}
-    for i, x in enumerate(xs):
-        tiles[f"side{i}"] = Pos(x, 0, z0) * Box(T_SIDE, TILE_D, SIDE_H,
-                                                 align=(Align.CENTER, Align.MIN, Align.MIN))
     for c in range(CUBES):
-        x_l = xs[c] - XW if c == 0 else xs[c] + RIB / 2
-        x_r = xs[c + 1] + XW if c == CUBES - 1 else xs[c + 1] - RIB / 2
-        length = x_r - x_l - 0.1                      # leave a hair so faces don't coincide
-        cx = (x_l + x_r) / 2
+        xl, xr = c * PITCH + X1, (c + 1) * PITCH - X1
+        cx, length = (xl + xr) / 2, xr - xl - 0.1        # a hair short so faces don't coincide
         tiles[f"top{c}"] = Pos(cx, 0, zt) * Box(length, TILE_D, T_SHELF,
                                                align=(Align.CENTER, Align.MIN, Align.MIN))
         tiles[f"bottom{c}"] = Pos(cx, 0, z0) * Box(length, TILE_D, T_SHELF,
                                                   align=(Align.CENTER, Align.MIN, Align.MAX))
-    return conns, tiles
+        for name, xs in (("L", xl), ("R", xr - T_SIDE)):
+            tiles[f"side{c}{name}"] = Pos(xs, 0, z0) * Box(
+                T_SIDE, TILE_D, SIDE_H, align=(Align.MIN, Align.MIN, Align.MIN))
+    return parts, tiles
 
 
 parts = {
-    "middle": print_pose(solid("middle")),
-    "end": print_pose(solid("end")),
-    "end_mirrored": print_pose(solid("end", mirrored=True)),
-    "fit_test": print_pose(solid("middle", arm=14.0, depth=10.0)),
+    "hub": print_pose(solid_hub()),
+    "plug": print_pose(plug(), back_down=True),
+    "fit_test": print_pose(fit_test()),
     "thickness_gauge": thickness_gauge(),
 }
 
