@@ -10,3 +10,4 @@ output/
 *.gcode
 *.gcode.3mf
 .DS_Store
+result.json

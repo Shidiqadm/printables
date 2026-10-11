@@ -42,6 +42,8 @@ uv run new-project "Desk cable clip"      # scaffold projects/desk-cable-clip/
 uv run projects/<slug>/model.py           # build, check, preview, export
 uv run export-all                         # rebuild every model
 uv run python -m ocp_viewer --port 3939   # live viewer (or preview_start "cad-viewer")
+uv run slice <file.stl|3mf> --process "0.28mm Extra Draft @BBL A1" --set wall_loops=3 --copies 4
+                                          # headless Bambu Studio slice: real time + grams
 ```
 
 ## Workflow for a new design
@@ -71,6 +73,16 @@ uv run python -m ocp_viewer --port 3939   # live viewer (or preview_start "cad-v
 - **Print-in-place**: gap of `fit("gap", "print_in_place")` mm (0.35 default).
 - **Multi-color (AMS)**: up to 4 filaments. Export bodies as `export({"base": a, "text": b}, name)`; they become separate objects in the 3MF so each gets its own filament.
 - **Size**: the bed is 256 x 256 mm, but leave around 5 mm margin. Split large parts with alignment pins or dovetails.
+
+## Print-time findings (A1, PLA, measured with `uv run slice`)
+
+- Chunky parts are limited by how fast PLA melts (volumetric flow): **print time tracks grams**. Speed overrides do nothing.
+- The levers that do work:
+  - layer height: 0.20 to 0.28 mm is about −19%, and XY fit is unaffected;
+  - wall count: each extra loop costs a lot on parts with many slot walls;
+  - less model volume.
+- Plating many copies saves only about 0.5 min of overhead per plate. Prefer small batches (about 3 h plates) so one failure costs little.
+- Slice a design before claiming a print time. Ship `print_plan.py`-style sliced `.gcode.3mf` plates when the user wants ready-to-print files.
 
 ## Tolerances
 

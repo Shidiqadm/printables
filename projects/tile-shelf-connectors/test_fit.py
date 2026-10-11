@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from build123d import Align, Box, Pos  # noqa: E402
 
 from core import (  # noqa: E402
-    CLEAR, CRUSH, DEPTH, PROTRUDE, T_SHELF, T_SIDE, THICK_TOL, TS, X1,
+    CLEAR, CRUSH, PROTRUDE, T_SHELF, T_SIDE, THICK_TOL, TS, X1,
 )
 from model import CUBES, STYLES, TRIM_LEN, assembly  # noqa: E402
 
@@ -70,14 +70,15 @@ def run(name: str) -> None:
     style = STYLES[name]
     print(f"== style: {name}")
     body, ribs, relief = style.hub()
-    print("slots:")
+    depth = style.DIMS.depth
+    print(f"slots (hub {style.DIMS.size:g} mm):")
     for delta in (-THICK_TOL, 0.0, THICK_TOL):
         t_shelf, t_side = T_SHELF + delta, T_SIDE + delta
         for sign in (1, -1):
             x_top = X1 if sign > 0 else -X1 - LONG
             x_side = X1 if sign > 0 else -X1 - t_side
-            top = Pos(x_top, 0, 0) * Box(LONG, DEPTH + 10, t_shelf, align=(Align.MIN,) * 3)
-            side = Pos(x_side, 0, 0) * Box(t_side, DEPTH + 10, LONG,
+            top = Pos(x_top, 0, 0) * Box(LONG, depth + 10, t_shelf, align=(Align.MIN,) * 3)
+            side = Pos(x_side, 0, 0) * Box(t_side, depth + 10, LONG,
                                            align=(Align.MIN, Align.MIN, Align.MAX))
             side_name = "right" if sign > 0 else "left "
             slot_case(f"t{delta:+.1f} hub {side_name} top ", body, ribs, top, delta)

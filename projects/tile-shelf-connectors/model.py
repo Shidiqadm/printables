@@ -23,7 +23,7 @@ from build123d import *  # noqa: E402
 import cube  # noqa: E402
 import deco  # noqa: E402
 from core import (  # noqa: E402
-    COLUMN, FRONT, H2, T_SHELF, T_SIDE, X1, ZTOP, hub_body, print_pose, thickness_gauge,
+    COLUMN, FRONT, T_SHELF, T_SIDE, X1, ZTOP, hub_body, print_pose, thickness_gauge,
 )
 from printlib import check, export, preview  # noqa: E402
 
@@ -50,8 +50,8 @@ POSES = {"FT": (0.0, None), "BT": (TILE_D, Rz), "FB": (0.0, Ry), "BB": (TILE_D, 
 
 def fit_test(style: ModuleType) -> Part:
     """Right half of a hub (column + one channel), 10 mm deep: tests both slots."""
-    body, ribs = hub_body(style.silhouette(), depth=10.0)
-    keep = Pos(-X1, -FRONT - 1, -100) * Box(H2 + X1 + 1, 30, 200, align=(Align.MIN,) * 3)
+    body, ribs = hub_body(style.DIMS, style.silhouette(), depth=10.0)
+    keep = Pos(-X1, -FRONT - 1, -100) * Box(style.DIMS.h2 + X1 + 1, 30, 200, align=(Align.MIN,) * 3)
     return (body + ribs) & keep
 
 
@@ -116,7 +116,7 @@ def build_parts(name: str) -> dict[str, dict[str, Part]]:
     hb, hr, hrel = style.hub()
     files = {
         "hub": print_pose(two_tone(hb + hr, hrel), face_up=style.HUB_FACE_UP),
-        "plug": print_pose({"plug": style.plug()}, face_up=False),
+        "plug": print_pose({"plug": style.plug()}, on_side=True),
         "fit_test": print_pose({"fit_test": fit_test(style)}, face_up=False),
     }
     if style.HAS_TRIMS:

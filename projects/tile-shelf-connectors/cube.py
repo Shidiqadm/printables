@@ -1,14 +1,15 @@
 """Plain cube styling (r2): grooved 3x3-block cube, like the reference photos.
 
 Same interface as deco.py, so model.py and test_fit.py can build either style:
-    silhouette(), hub() -> (body, crush_ribs, relief | None), plug(), CROWN, HAS_TRIMS,
-    HUB_FACE_UP
+    DIMS, silhouette(), hub() -> (body, crush_ribs, relief | None), plug(), CROWN,
+    HAS_TRIMS, HUB_FACE_UP
 """
 
 from build123d import *
 
-from core import FRONT, H2, HUB, TS, X1, ZBOT, ZTOP, hub_body, plug_body, rect
+from core import FRONT, TS, X1, ZTOP, Hub, hub_body, plug_body, rect
 
+DIMS = Hub(44.0)          # 44 mm cube: ~20% faster to print than 48 with the same slots
 ROUND = 2.0               # radius on the cube's long edges
 EDGE = 1.0                # chamfer on the front face edges (bed side when printing)
 GROOVE_W = 1.0            # decorative grooves along the tile planes
@@ -20,27 +21,27 @@ HUB_FACE_UP = False       # print front face down: smooth bed finish on the visi
 
 
 def silhouette() -> Sketch:
-    return fillet(rect(-H2, H2, ZBOT, ZTOP).vertices(), ROUND)
+    return fillet(rect(-DIMS.h2, DIMS.h2, DIMS.zbot, ZTOP).vertices(), ROUND)
 
 
 def _grooves() -> Part:
     """Grooves where the tile planes meet the front and top faces."""
     cuts = []
     for x in (-X1, X1):                             # front face, vertical
-        cuts.append(Pos(x, -FRONT, 0) * Box(GROOVE_W, 2 * GROOVE_D, 2 * HUB))
-        cuts.append(Pos(x, 0, ZTOP) * Box(GROOVE_W, 3 * HUB, 2 * GROOVE_D))   # top face
+        cuts.append(Pos(x, -FRONT, 0) * Box(GROOVE_W, 2 * GROOVE_D, 2 * DIMS.size))
+        cuts.append(Pos(x, 0, ZTOP) * Box(GROOVE_W, 3 * DIMS.size, 2 * GROOVE_D))   # top face
     for z in (0.0, TS):                             # front face, horizontal
-        cuts.append(Pos(0, -FRONT, z) * Box(2 * HUB, 2 * GROOVE_D, GROOVE_W))
+        cuts.append(Pos(0, -FRONT, z) * Box(2 * DIMS.size, 2 * GROOVE_D, GROOVE_W))
     return Part(Compound(cuts).fuse())
 
 
 def hub() -> tuple[Part, Part, None]:
     """(body, crush_ribs, None) of the plain cube hub in the shelf frame."""
-    body, ribs = hub_body(silhouette())
+    body, ribs = hub_body(DIMS, silhouette())
     face = body.edges().filter_by_position(Axis.Y, -FRONT - 1e-3, -FRONT + 1e-3)
     body = chamfer(face, EDGE) - _grooves()
     return body, ribs, None
 
 
 def plug() -> Part:
-    return plug_body(ZBOT)
+    return plug_body(DIMS)

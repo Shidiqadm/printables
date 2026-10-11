@@ -8,6 +8,8 @@ Z up. A hub is modelled at the front-top corner between two cubes: X=0 is the mi
 its centre column, Z=0 is the top edge of the side tiles.
 """
 
+from dataclasses import dataclass
+
 from build123d import *
 
 from printlib import A1, fit
@@ -23,8 +25,7 @@ RIB_END = 3.0             # hub crush ribs stop this far before the back mouth..
 RIB_RAMP = 2.0            # ...after ramping down over this length
 LEAD = 1.0                # lead-in chamfer at slot mouths
 
-# ---- Hub -------------------------------------------------------------------
-HUB = 48.0                # cube size (without crown)
+# ---- Hub (size is per style: see Hub below) -------------------------------
 COLUMN = 8.0              # centre column between the two cubes' side tiles
 CAP = A1.wall(12)         # 5.04: cap over the top tiles
 FRONT = 5.0               # solid front face that ties the blocks together
@@ -34,14 +35,31 @@ TS = T_SHELF + CLEAR            # top-tile slot height
 TW = T_SIDE + CLEAR             # side-tile slot width
 X1 = COLUMN / 2                 # column face = inner face of the side slot
 X2 = X1 + TW                    # corner-block face = outer face of the side slot
-H2 = HUB / 2
 ZTOP = TS + CAP                 # top of the cap
-ZBOT = ZTOP - HUB               # bottom of the hub
-DEPTH = HUB - FRONT             # slot depth along Y
 PROTRUDE = CLEAR + CRUSH        # how far a crush rib reaches into its slot
 
-assert H2 - X2 >= 8, f"corner blocks only {H2 - X2:.1f} mm: increase HUB"
-assert ZBOT < -25, "side tile clamp too short: increase HUB"
+
+@dataclass(frozen=True)
+class Hub:
+    """Size-dependent hub dimensions. Each style picks its own cube size."""
+
+    size: float                 # cube edge (without any crown)
+
+    def __post_init__(self):
+        assert self.h2 - X2 >= 8, f"corner blocks only {self.h2 - X2:.1f} mm: increase size"
+        assert self.zbot < -25, "side tile clamp too short: increase size"
+
+    @property
+    def h2(self) -> float:      # half width
+        return self.size / 2
+
+    @property
+    def zbot(self) -> float:    # bottom of the hub
+        return ZTOP - self.size
+
+    @property
+    def depth(self) -> float:   # slot depth along Y
+        return self.size - FRONT
 
 PROFILE_PLANE = Plane(origin=(0, 0, 0), x_dir=(1, 0, 0), z_dir=(0, -1, 0))  # (u,v) -> (X,0,Z)
 
@@ -58,18 +76,18 @@ def near(sketch: Sketch, points: list[tuple[float, float]], tol: float = 1e-3):
     ]
 
 
-def channel(sign: int) -> Sketch:
+def channel(hub: Hub, sign: int) -> Sketch:
     """L-shaped channel for one cube: top tile (horizontal) + side tile (vertical)."""
-    ch = rect(X1, H2 + 1, 0, TS) + rect(X1, X2, ZBOT - 5, 0)
+    ch = rect(X1, hub.h2 + 1, 0, TS) + rect(X1, X2, hub.zbot - 5, 0)
     return mirror(ch, about=Plane.YZ) if sign < 0 else ch
 
 
-def profile(outline: Sketch) -> Sketch:
+def profile(hub: Hub, outline: Sketch) -> Sketch:
     """Cut both channels out of a hub outline and chamfer their mouths."""
-    prof = outline - channel(1) - channel(-1)
+    prof = outline - channel(hub, 1) - channel(hub, -1)
     mouths = []
     for s in (1, -1):
-        mouths += [(s * H2, TS), (s * H2, 0)]
+        mouths += [(s * hub.h2, TS), (s * hub.h2, 0)]
     bottom = prof.vertices().sort_by(Axis.Y)[0].Y
     for s in (1, -1):
         mouths += [(s * X1, bottom), (s * X2, bottom)]
@@ -87,9 +105,10 @@ def crush_rib_y(wall: tuple[float, float], n: tuple[float, float], depth: float)
     return straight + loft([start, end], ruled=True)
 
 
-def hub_body(outline: Sketch, depth: float = DEPTH) -> tuple[Part, Part]:
+def hub_body(hub: Hub, outline: Sketch, depth: float | None = None) -> tuple[Part, Part]:
     """Return (body, crush_ribs) for a hub with the given outside outline (XZ sketch)."""
-    body = extrude(PROFILE_PLANE * profile(outline), amount=-depth)   # +Y, into the shelf
+    depth = hub.depth if depth is None else depth
+    body = extrude(PROFILE_PLANE * profile(hub, outline), amount=-depth)   # +Y, into the shelf
     body += extrude(PROFILE_PLANE * outline, amount=FRONT)            # solid front, -Y
 
     def on_slot(e: Edge) -> bool:
@@ -104,25 +123,29 @@ def hub_body(outline: Sketch, depth: float = DEPTH) -> tuple[Part, Part]:
 
     ribs = []
     for s in (1, -1):
-        for x in (X1 + 3.0, H2 - 4.0):                       # cap underside, pushing down
+        for x in (X1 + 3.0, hub.h2 - 4.0):                   # cap underside, pushing down
             ribs.append(crush_rib_y((s * x, TS), (0, -1), depth))
-        for z in (-6.0, ZBOT + 5.0):                          # corner-block face, pushing in
+        for z in (-6.0, hub.zbot + 5.0):                      # corner-block face, pushing in
             ribs.append(crush_rib_y((s * X2, z), (-s, 0), depth))
     return body, Part(Compound(ribs).fuse())
 
 
-def plug_body(bottom: float = ZBOT) -> Part:
+def plug_body(hub: Hub) -> Part:
     """Fills the right-hand channel (nominal tile thickness, so the ribs grip it)."""
-    prof = rect(X1, H2, 0, T_SHELF) + rect(X1, X1 + T_SIDE, bottom, 0)
-    p = extrude(PROFILE_PLANE * prof, amount=-DEPTH)
+    prof = rect(X1, hub.h2, 0, T_SHELF) + rect(X1, X1 + T_SIDE, hub.zbot, 0)
+    p = extrude(PROFILE_PLANE * prof, amount=-hub.depth)
     ends = p.edges().filter_by_position(Axis.Y, -1e-3, 1e-3) + \
-        p.edges().filter_by_position(Axis.Y, DEPTH - 1e-3, DEPTH + 1e-3)
+        p.edges().filter_by_position(Axis.Y, hub.depth - 1e-3, hub.depth + 1e-3)
     return chamfer(ends, 0.5)
 
 
-def print_pose(parts: dict[str, Part], face_up: bool = True) -> dict[str, Part]:
-    """Rotate pieces together so the front face points up (or down), resting on Z=0."""
-    rot = Rot(-90, 0, 0) if face_up else Rot(90, 0, 0)
+def print_pose(parts: dict[str, Part], face_up: bool = True, on_side: bool = False) -> dict[str, Part]:
+    """Rotate pieces together onto the bed, resting on Z=0 and centred.
+
+    face_up / not face_up: front face up or down (channels stay vertical).
+    on_side: lie on the -X face instead (used for the plug: 18 mm tall, not a 39 mm column).
+    """
+    rot = Rot(0, -90, 0) if on_side else Rot(-90, 0, 0) if face_up else Rot(90, 0, 0)
     turned = {k: rot * p for k, p in parts.items()}
     bbs = [p.bounding_box() for p in turned.values()]
     cx = (min(b.min.X for b in bbs) + max(b.max.X for b in bbs)) / 2

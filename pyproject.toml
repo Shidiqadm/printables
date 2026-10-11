@@ -12,6 +12,7 @@ dependencies = [
 [project.scripts]
 new-project = "printlib.cli:new_project"
 export-all = "printlib.cli:export_all"
+slice = "printlib.slicer:main"
 
 [build-system]
 requires = ["hatchling"]

@@ -1,6 +1,6 @@
 """Art Deco styling for the tile shelf: "skyscraper corner" hub, end plugs, cornice trims.
 
-Same interface as cube.py: silhouette(), hub(), plug(), CROWN, HAS_TRIMS, HUB_FACE_UP.
+Same interface as cube.py: DIMS, silhouette(), hub(), plug(), CROWN, HAS_TRIMS, HUB_FACE_UP.
 
 Only the outside changes; the tile channels and crush ribs come from core.py untouched.
 
@@ -17,12 +17,11 @@ import math
 
 from build123d import *
 
-from core import (
-    CRUSH, FRONT, H2, LEAD, PROFILE_PLANE, PROTRUDE, RIB_R, T_SHELF, TS, X1, ZBOT, ZTOP,
-    hub_body, near, plug_body, rect,
-)
+from core import FRONT, PROTRUDE, RIB_R, TS, ZTOP, Hub, hub_body, near, plug_body, rect
 
 # ---- Style parameters (mm) -------------------------------------------------
+DIMS = Hub(48.0)          # the Deco hub keeps the full 48 mm cube for its proportions
+H2, ZBOT = DIMS.h2, DIMS.zbot
 CROWN_STEP = 1.6          # height of each crown / plinth tier
 CROWN_INSETS = (4.0, 10.0)  # how far each tier steps in from the hub sides
 CORBEL_STEP = 2.0         # how far each corbel setback steps in
@@ -110,14 +109,14 @@ def _chamfer_face(part: Part, face_y: float) -> Part:
 
 def hub() -> tuple[Part, Part, Part]:
     """(body, crush_ribs, relief) of the Deco hub in the shelf frame, front-top position."""
-    body, ribs = hub_body(silhouette())
+    body, ribs = hub_body(DIMS, silhouette())
     body = _chamfer_face(body, -FRONT)
     return body, ribs, _relief(hub_relief_sketch(), -FRONT)
 
 
 def plug() -> Part:
     """End plug; speed-line grooves on its outer face continue the hub's front lines."""
-    p = plug_body(ZBOT)
+    p = plug_body(DIMS)
     for z in SPEED_Z:
         p -= Pos(H2, 0, z) * Box(1.0, 200, LINE_W, align=(Align.CENTER, Align.CENTER, Align.CENTER))
     return p

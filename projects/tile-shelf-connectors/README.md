@@ -12,8 +12,8 @@ There are two styles. Both share the same tile channels and grip (`core.py`), so
 
 | Style | Look | Pieces | Colours |
 |-------|------|--------|---------|
-| **cube** (`cube.py`) | Grooved 48 mm cube with a 3×3 block pattern, like the reference photos | hub, plug | one colour, e.g. terracotta |
-| **deco** (`deco.py`) | "Skyscraper corner": stepped crown/plinth, stepped corbels, gold spire, speed lines and sunburst | hub, plug, cornice trim, keystone medallion | matte black + silk gold |
+| **cube** (`cube.py`) | Grooved 44 mm cube with a 3×3 block pattern, like the reference photos; tuned for fast printing | hub, plug | one colour, e.g. terracotta |
+| **deco** (`deco.py`) | 48 mm "skyscraper corner": stepped crown/plinth, stepped corbels, gold spire, speed lines and sunburst | hub, plug, cornice trim, keystone medallion | matte black + silk gold |
 
 ## Files (in `output/`)
 
@@ -28,7 +28,7 @@ There are two styles. Both share the same tile channels and grip (`core.py`), so
 | tiles | | N top, N bottom, 2N side | 3 + 3 + 6 |
 
 PLA for a 3-cube shelf:
-- **cube:** about 0.9 kg.
+- **cube:** 581 g and 13 h 27 min, as sliced by Bambu Studio (see below).
 - **deco:** about 1.1 kg with trims, roughly 30 g of it gold. The trims and medallions are optional.
 
 ## Workflow
@@ -40,14 +40,47 @@ PLA for a 3-cube shelf:
    - Too loose: raise it by 0.1.
 4. **Print the set**, then assemble.
 
+### Fastest route for the cube style: ready-sliced plates
+
+`uv run projects/tile-shelf-connectors/print_plan.py` slices ready-to-print Bambu projects into `output/cube/print/`. Open them in Bambu Studio, or send them straight to the A1.
+
+| File | Contents | Time | PLA | Print |
+|------|----------|------|-----|-------|
+| `1_test_plate.gcode.3mf` | thickness gauge + fit test | 28 min | 17 g | once, first |
+| `2_hub_plate.gcode.3mf` | 4 hubs + 2 plugs | 3 h 15 min | 141 g | 4 times |
+
+The slices assume Bambu PLA Basic. With another PLA, pick that filament in Bambu Studio and re-slice. The time barely changes.
+
+Re-run `model.py cube` and `print_plan.py` after changing tile thickness or `CRUSH`. The test plate and hub plate must use the same settings, because the grip depends on them.
+
 ## Print settings (Bambu Studio)
 
-Both styles: PLA, 0.20 mm layers, 4 walls, 20% gyroid infill, no supports, no brim. Print as exported. About 2 h per hub; four hubs fit on one plate.
+**cube** (as embedded in the sliced plates)
 
-**cube**
-- The hub prints grooved face down, so the visible face gets the smooth bed finish.
+| Setting | Value | Why |
+|---------|-------|-----|
+| Printer | Bambu Lab A1, 0.4 mm nozzle | |
+| Process preset | 0.28mm Extra Draft @BBL A1 | 19% faster than 0.20 Standard. Slot widths are set by XY moves, not layer height, so the fit is unaffected. |
+| Wall loops | 3 | Sturdy cap and clamp faces. Costs 6 min per hub over 2 walls. |
+| Sparse infill | 15% grid | Fastest pattern. Plenty, since the blocks only take compression. |
+| Supports / brim | none / none | Nothing overhangs, and a 44 mm footprint sticks fine on textured PEI. |
+| Orientation | hub: grooved face down; plug: lying on its side | Smooth bed finish on the visible face. The plug is 18 mm tall instead of a 39 mm column, so it stays steady on the moving bed. |
+| Elephant-foot compensation | 0.075 (preset) | The model also has 1 mm chamfers on the bed edges. |
 
-**deco**
+**How these were chosen:** by slicing variants headless in Bambu Studio (`uv run slice <file> --process ... --set key=value`).
+- Time tracks grams, because the hub is limited by how fast PLA melts. Raising speed settings changed nothing.
+- Plating more hubs together barely helps: about 0.5 min of overhead per plate.
+- The real levers were layer height (0.20 to 0.28: −19%), the 48 to 44 mm cube (−20%) and wall count.
+
+| Variant | Per hub |
+|---------|---------|
+| 48 mm, 0.20 Standard, 2 walls (Bambu defaults) | 58 min, 32 g |
+| 48 mm, 0.28, 3 walls | 55 min, 39 g |
+| **44 mm, 0.28, 3 walls (chosen)** | **44 min, 31 g** |
+| 44 mm, 0.28, 2 walls | 38 min, 26 g |
+
+**deco** (not yet optimised like the cube style)
+- PLA, 0.20 mm layers, 4 walls, 20% gyroid infill, no supports, no brim.
 - Hub, trim and medallion print decorated face up.
 - **Two colours:** each of these files contains two parts, body and relief. When Bambu Studio asks whether to load them as a single object with multiple parts, answer **Yes**. Then set the body to matte black PLA and the relief to silk gold PLA. The colour change only happens in the last ~6 layers, so filament waste is tiny.
 - **Top surface:** turn on **ironing** (top surfaces only) for a glassy finish on the faces.
@@ -59,7 +92,7 @@ Both styles: PLA, 0.20 mm layers, 4 walls, 20% gyroid infill, no supports, no br
 | core.py | `T_SHELF`, `T_SIDE` | 8.0 | nominal tile thicknesses |
 | core.py | `THICK_TOL` | 0.3 | tiles within ±0.3 of nominal fit without reprinting |
 | core.py | `CRUSH` | 0.3 | crush-rib bite at nominal thickness |
-| core.py | `HUB` | 48 | cube size |
+| cube.py / deco.py | `DIMS = Hub(...)` | 44 / 48 | cube size per style |
 | cube.py | `ROUND`, `GROOVE_W` | 2, 1.0 | edge radius and groove width |
 | deco.py | `CROWN_INSETS`, `CORBEL_LEVELS` | | crown tiers and corbel setbacks |
 | deco.py | `RAY_ANGLES`, `RELIEF` | 9 rays, 1.2 mm | sunburst and relief height |
