@@ -1,7 +1,7 @@
 # Tile shelf connectors: design spec
 
 **Date:** 2026-10-11
-**Status:** approved concept (approach B), spec awaiting review
+**Status:** approved, implemented
 **Project folder:** `projects/tile-shelf-connectors/`
 
 ## Goal
@@ -80,15 +80,16 @@ The middle connector, seen from the front:
 
 ### Grip
 
-- **Clearance:** slots are nominal tile thickness + `CLEAR` (0.2 mm, the linear "slip" fit from `tolerances.toml`).
+- **Thickness band:** each slot accepts tiles within ±`THICK_TOL` (0.3 mm) of nominal without reprinting.
+- **Clearance:** slots are nominal tile thickness + `CLEAR`, where `CLEAR` = `THICK_TOL` + the linear "snug" fit (0.1) = 0.4 mm. A tile at +0.3 mm still slides in with 0.1 mm to spare.
 - **Crush ribs:**
-  - Half-round ribs run along Y, on one face of each slot: the cap underside for shelf slots, and the inner jaw for side slots.
-  - Each rib protrudes `CLEAR + CRUSH` into the slot, with `CRUSH` = 0.3 mm interference at nominal thickness.
-  - This tolerates tiles from about nominal −0.3 mm (still in contact) to about nominal +0.3 mm (more crush).
-  - Ribs run parallel to the slide-in direction, so they shave rather than catch.
-- **Rib count:** two ribs per slot face, placed near the far ends of the clamp length so the grip resists rotation (racking), not just sliding.
-- **Lead-in:** slot mouths at Y=DEPTH get a 45° chamfer of 1.0 mm. Crush ribs start 3 mm inside the mouth.
-- **Wider batch variation:** change `T_SHELF`/`T_SIDE` and reprint. No spring tabs, because PLA creep would relax them.
+  - Half-round ribs (R 2 mm) run along Y, on one face of each slot: the cap underside for shelf slots, and the +X jaw for side slots.
+  - Each rib reaches `CLEAR + CRUSH` = 0.7 mm into the slot. Interference is 0 at −0.3 mm, 0.3 at nominal and 0.6 at +0.3 mm. Part of that is taken up by the jaws flexing.
+  - Ribs run parallel to the slide-in direction, so they shave rather than catch. Their round profile also acts as a ramp for side tiles dropped in vertically.
+- **Rib count:** two ribs per slot face, near the far ends of the clamp length, so the grip resists rotation (racking), not just sliding.
+- **Lead-in:** slot mouths at the back and at the wing ends get a 1.0 mm 45° chamfer. Crush ribs stop 3 mm inside the back mouth and ramp in over 2 mm.
+- **Outside the band:** change `T_SHELF`/`T_SIDE` and reprint. No spring tabs, because PLA creep would relax them.
+- **Measuring without calipers:** a printed `thickness_gauge` comb (5.0–12.0 mm in 0.5 mm steps) finds the tile thickness.
 
 ### Parameters (defaults)
 
@@ -96,8 +97,9 @@ The middle connector, seen from the front:
 |------|---------|---------|
 | `T_SHELF` | 8.0 | top/bottom tile thickness |
 | `T_SIDE` | 8.0 | side tile thickness |
-| `CLEAR` | from `fit("slip","linear")` = 0.20 | slot clearance (total) |
-| `CRUSH` | 0.30 | crush rib interference |
+| `THICK_TOL` | 0.30 | tile thickness variation handled without reprinting |
+| `CLEAR` | `THICK_TOL` + `fit("snug","linear")` = 0.40 | slot clearance (total) |
+| `CRUSH` | 0.30 | crush rib interference at nominal thickness |
 | `RIB` | 2.0 | gap/rib between top tiles |
 | `PLATE` | 3.36 | jaw/wall thickness (8 lines) |
 | `CAP` | 4.2 | cap/foot thickness (10 lines); sized for racking stiffness |
@@ -142,7 +144,7 @@ Assumed tiles: 300×300×8 mm, about 1.7 kg each. A 3-cube row with 10 kg per cu
 
 - `projects/tile-shelf-connectors/model.py`: parametric generator for the `middle`, `end` and `end_mirrored` parts and a `fit_test` piece, plus a digital assembly of a 3-cube row (assembly is preview only, not exported).
 - `projects/tile-shelf-connectors/README.md`: parameters, print settings, counts per row length, assembly steps, print log.
-- Exports: `middle.3mf`, `end.3mf`, `end_mirrored.3mf`, `fit_test.3mf` (plus STEP and STL).
+- Exports: `middle.3mf`, `end.3mf`, `end_mirrored.3mf`, `fit_test.3mf`, `thickness_gauge.3mf` (plus STEP and STL).
 
 ## Verification
 
