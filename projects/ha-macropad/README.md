@@ -50,6 +50,7 @@ Output (`output/<part>/`, rebuilt by `model.py`; every part is already in print 
 | `hub/hub-shell(-ams).3mf`, `hub/hub-base.3mf` | 1 each | |
 | `ld2410c/` or `ld2450/` `-pod.3mf`, `-bracket.3mf` | 1 each | pod in body colour, bracket orange |
 | `coupon/fit-coupon.3mf` | 1, first | any |
+| `coupon/stem-test.gcode.3mf` | 1, if you already printed the coupon | the coupon's stem half only (10 min) |
 | `*-assembly.step` | | for Fusion / FreeCAD |
 
 ## Key dimensions
@@ -60,7 +61,8 @@ Output (`output/<part>/`, rebuilt by `model.py`; every part is already in print 
 | Switch plate hole / plate | 14.0 / 1.6 mm | Cherry MX datasheet: 14.00 ±0.05, plate 1.5 ±0.1. 1.6 is 8 whole layers (a 1.5 mm plate slices to 1.4) and the usual FR4 plate thickness |
 | Plate snaps | 1.0 mm beam, 0.8 mm slot, 28.8 mm free length; barb 0.5 mm past the well wall | design: 0.72 % bending strain when it clicks in |
 | Switch below plate / pins / above / stem / travel | 5.0 / 3.3 / 6.6 / 3.6 / 4.0 mm | Cherry MX datasheet |
-| Stem socket | cross 4.1 × 1.17 + 0.20 slop, 4.0 deep | Cherry keycap socket spec (via Deskthority); slop set by the fit coupon |
+| Stem socket | cross 4.1 × 1.32 + 0.10 slop (both arms), 4.0 deep, in a Ø5.5 post with a 0.2 mm chamfered tip | Box stems have one thick arm (Kailh spec 1.32, measured 1.30–1.42) and one thin arm (1.10–1.24); Cherry MX 1.31. Keebtalk / Deskthority measurements; slop set by the fit coupon |
+| Switch stem | box stem: the cross stands inside a square rim; the cap's round post goes down inside the rim | the user's Outemu switches (photo, 2026-10-17); box switches take MX caps |
 | Key well | plate 3.0 mm below the deck, 0.8 mm gap round the caps | design |
 | Keycap height above the deck | 3.6 mm at rest, 0.4 mm below the deck when pressed | design (from the MX numbers) |
 | XIAO ESP32-C3 PCB | 21.0 × 17.8 × 1.2 mm | Seeed wiki; thickness community-measured |
@@ -102,6 +104,16 @@ The first HK-22 print (2026-10-17) showed three problems. v0.8 fixes them:
   unfilled area dropped from 46 to 8 mm², and the plate's to nearly zero). `print_plan.py`
   now ships sliced files with Arachne, slow outer walls and a slow first layer (see
   *Print settings*).
+- **The keycaps didn't suit the switches.** The Outemu switches have a box stem: the "+"
+  stands inside a square rim. The cap's post goes down inside that rim, as an MX cap's does,
+  and its tip is now chamfered so a squashed first layer can't stop it. Box stems have one
+  arm thicker than 1.17 mm (up to about 1.4), so both slots are now cut for the thick arm.
+  The old coupon's stem sockets were wide blocks that the rim kept off the cross. The coupon
+  now has real keycap posts, mouth up.
+- **The keycaps failed to print.** Their 0.5 mm finger dish meant that, top-down, the middle
+  of the top floated off the bed. The top is now flat with a 0.6 mm chamfer, and the caps
+  print top-down: the top takes the bed's texture like the deck, and the socket prints
+  mouth-up like the fit coupon's posts (stick 10 fit snugly).
 - **Smaller fixes:**
   - The plate is now 1.6 mm (8 whole layers); 1.5 mm sliced to 1.4.
   - The shell is turned over left-to-right for printing, so a "Back" seam lands on the USB-C
@@ -199,11 +211,20 @@ as they are:
 
 | File | Process | Time | PLA |
 |------|---------|------|-----|
-| `1_shell.gcode.3mf` | 0.20 mm Standard + the changes below, outer walls 60 mm/s at 2000 mm/s², inner walls 150 mm/s | 48 min | 16.8 g |
-| `2_plate_base.gcode.3mf` | 0.20 mm Standard + the changes below | 21 min | 10.5 g |
-| `3_keycaps.gcode.3mf` (× 4) | 0.12 mm High Quality + the changes below. Set one cap to the orange filament | 26 min | 4.5 g |
+| `hk22-all-parts.gcode.3mf` (`print_plan.py hk22 all`) | **every part on one plate**: shell, plate, base, 4 keycaps | 1 h 31 min | 32.0 g |
+| `0_test_plate_keycap.gcode.3mf` (`print_plan.py hk22 test`) | the plate + 1 keycap, to test before the full set | 9 min | 2.5 g |
+| `1_shell.gcode.3mf` | the shell | 49 min | 16.8 g |
+| `2_plate_base.gcode.3mf` | the plate and the plain base | 23 min | 10.5 g |
+| `3_keycaps.gcode.3mf` (× 4) | the keycaps. Set one cap to the orange filament | 18 min | 4.8 g |
+
+All of them use 0.20 mm Standard with the changes below. Every height in the model (plate
+seat, snap catches, sensor cradle, keycap socket) sits on a 0.2 mm layer line.
 
 The changes from Bambu's presets, and why:
+
+- **Plate type: Textured PEI, bed at 65 °C.** Files sliced before 2026-10-17 were set for
+  the Cool Plate by mistake, so the bed only heated to 35 °C. That gives a weak first layer
+  with gaps. Re-run `print_plan.py` and use the new files.
 
 - **Wall generator: Arachne.** The classic generator leaves small voids where a wall is not a
   whole number of 0.42 mm lines wide: round the speaker grille, round the LED dots on the
@@ -213,16 +234,29 @@ The changes from Bambu's presets, and why:
   you see) and the base's underside are the first layer. Slower lines fuse without gaps.
 - **Seam: Back.** It lands on the USB-C wall.
 - **Avoid crossing walls: on.** Travel moves go round the walls, not across the visible ones.
-- **Slow outer walls on the shell** (the High Quality values). Kept at 0.20 mm layers,
-  because every height in the model (plate seat, snap catches, sensor cradle) sits on a
-  0.2 mm layer line.
+- **Nozzle 210 °C (215 °C first layer), flow capped at 12 mm³/s.** At that flow 210 °C is
+  hot enough for any PLA, so walls and infill stay full (no gaps), and cooler PLA strings
+  less than the preset's 220 °C.
+- **Outer walls 60 mm/s at 2000 mm/s², inner walls 150 mm/s** (Bambu's High Quality values):
+  no ringing on the walls.
+- **Keycaps top-down.** The flat top prints on the bed and takes its texture, like the shell's
+  deck; the socket opens upwards, exactly as on the fit coupon. Don't flip them.
+- **Print sequence: by layer** (the preset). "By object" stops strings between parts, but
+  Bambu Studio then keeps a wide clearance round every part and won't let you arrange them
+  closely.
 
-If the deck face still shows gaps between lines, the slicer is not the cause. Check these:
+If the print strings (fine hairs between parts), or the deck face still shows gaps between
+lines, the slicer is not the cause. Check these:
 
 - Wash the plate with dish soap and water.
 - Make sure you use the textured PEI side.
 - Run the printer's bed levelling.
-- Dry the filament if it crackles or strings. Wet PLA under-extrudes.
+- **Dry the filament.** Wet PLA strings, pops or crackles at the nozzle, and under-extrudes,
+  which leaves gaps. PLA takes up water in humid air within days. Dry it at 50–55 °C for
+  6–8 hours in a filament dryer, then store it in a sealed box with silica gel.
+- **Pick the filament profile for your brand** in Bambu Studio. If it isn't Bambu PLA, use
+  Generic PLA or the maker's profile. Then run *Calibration → Temperature* and
+  *Calibration → Retraction test* once for that spool.
 
 Times for the other parts, from a headless slice (`uv run slice`), Bambu PLA Basic, 0.20 mm
 Standard unless noted:
@@ -233,7 +267,7 @@ Standard unless noted:
 | HK-4 shell | deck on the bed | 36 min at 0.16 mm (32 min at 0.20) | 17.6 g | textured PEI gives the top its matte finish. 0.16 mm layers show fewer lines on the walls. Seam: back |
 | HK-4 plate | top on the bed | 3 min | 1.1 g | |
 | HK-4 base | flat | 16 min | 9.0 g | AMS: label in white or black (the first 2 layers swap) |
-| keycap × 4 | upright, skirt on the bed | 6 min each | 1.2 g each | see keycap settings |
+| keycap × 4 | top on the bed, open side up | 4–5 min each | 1.2 g each | flat top: nothing special to set |
 | HK-22 shell / base | as above | 30 / 16 min | 16.3 / 9.3 g | |
 | hub shell / base | deck down / flat | 9 / 10 min | 4.6 / 3.4 g | the clips stand upright: print the base about 220 °C for good layer bonding |
 | LD2410C pod / bracket | window down / flat bottom | 10 / 18 min | 3.6 / 6.5 g | |
@@ -241,17 +275,15 @@ Standard unless noted:
 
 A full HK-4 from `print_plan.py` is about 1 h 40 min and 33 g. Elsewhere, use 3 Arachne walls and 15% infill, with no supports and no brim. The bed edges of the shells, plates, bases, keycaps and radar pods are chamfered, so leave elephant-foot compensation at the preset.
 
-### Keycap settings (smooth dish)
-
-1. Use a 0.16 mm layer height for the plate.
-2. Right-click the keycap → *Add height range modifier* → range **6.0–7.0 mm**, layer height **0.08 mm**.
-3. Set *Top surface pattern* to **Monotonic line**.
-4. Matte PLA hides what's left of the layer lines. A light pass with 600-grit sandpaper is optional.
-
 ### Fit coupon first
 
 - **Switch holes (14.0 / 14.1 / 14.2):** pick the one where a switch clicks in firmly without wobbling. Set `SWITCH_HOLE` in `remote.py`. Result on this A1 (2026-10-17): 14.0 fits firmly, so `SWITCH_HOLE = 14.0`. The next coupon prints 13.9 / 14.0 / 14.1.
-- **Stem sockets (labelled 10–30 = slop 0.10–0.30 mm):** push a switch stem into each. Pick the snuggest one that still goes on fully without forcing, and set `STEM_SLOP` in `keycap.py`.
+- **Keycap posts (labelled 00–20 = slop 0.00–0.20 mm):** turn the bar over and push each
+  post onto a switch. It goes down inside the square rim round the cross. Pick the snuggest
+  one that goes on fully without forcing, and set `STEM_SLOP` in `keycap.py`. Result on
+  the Outemu box stems (2026-10-17): 10 fits snugly, so `STEM_SLOP = 0.10`. If no post
+  goes into the rim, the rim is smaller than 5.5 mm: lower `STEM_D` to 5.3. If you have
+  already printed the coupon, print only `coupon/stem-test.gcode.3mf`.
 
 ## Assembly (remote)
 
@@ -271,7 +303,7 @@ A full HK-4 from `print_plan.py` is about 1 h 40 min and 33 g. Elsewhere, use 3 
    - Push the XIAO back in its cradle until its USB-C sits in the port, 0.3 mm short of the outside, and fix it with a dab of hot glue.
    - Trim the buzzer pins to about 1.5 mm, solder its wires and set it in its seat. The wires run along the groove to the XIAO.
 7. Flash the firmware over USB-C. Put the base on, fit the 4 screws, and stick the feet over them.
-8. Push the keycaps on, with the orange one at position 4.
+8. Push the keycaps on, with the orange one at position 4. The post goes inside the square rim round the cross, either way round.
 
 ## Hub and radar pods
 

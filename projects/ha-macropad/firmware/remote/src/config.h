@@ -57,6 +57,8 @@ static const uint8_t PIN_DOT[4] = {21, 20, 8, 9};
 
 #define BATT_DIVIDER 2.0f
 #define BATT_CAL 1.000f          // trim against a multimeter: real / reported
+#define BATT_ABSENT_MV 2500      // below this there is no cell (or no divider fitted): ignore it.
+                                 // A LiPo's protection board cuts out before the cell gets this low.
 #define BATT_WARN_MV 3550        // warn on every wake below this
 #define BATT_SHUTDOWN_MV 3400    // switch off to protect the cell
 #define BATT_RESUME_MV 3700      // charging lifts the cell above this: wake up again

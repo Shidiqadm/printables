@@ -24,6 +24,9 @@ PROFILES = APP / "Contents/Resources/profiles/BBL"
 MACHINE = "Bambu Lab A1 0.4 nozzle"
 PROCESS = "0.20mm Standard @BBL A1"
 FILAMENT = "Bambu PLA Basic @BBL A1"
+# The A1 ships with the textured PEI plate. Left unset, the CLI slices for the Cool Plate,
+# which heats the bed to only 35 C for PLA (65 C on textured PEI): weak first layers.
+BED = "Textured PEI Plate"
 
 
 def profile(category: str, name: str) -> dict:
@@ -86,7 +89,8 @@ def _make_gui_loadable(path: Path, process: str, overrides: dict) -> None:
     cfg.setdefault("filament_multi_colour", list(colours))
     # record which process values differ from the system preset, as the GUI does
     system = profile("process", process)
-    changed = sorted(k for k, v in overrides.items() if str(system.get(k)) != str(v))
+    changed = sorted(k for k, v in overrides.items()
+                     if k != "curr_bed_type" and str(system.get(k)) != str(v))  # plate type is not a process key
     diff = list(cfg.get("different_settings_to_system", ["", "", ""]))
     if diff:
         diff[0] = ";".join(changed)
@@ -99,6 +103,26 @@ def _make_gui_loadable(path: Path, process: str, overrides: dict) -> None:
     tmp.replace(path)
 
 
+def _object_settings(project: Path, object_settings: dict) -> None:
+    """Give objects their own settings (e.g. a finer layer height) in an unsliced project:
+    each object whose name contains a key of object_settings gets that dict's values."""
+    with zipfile.ZipFile(project) as z:
+        entries = {i.filename: z.read(i.filename) for i in z.infolist()}
+    name = "Metadata/model_settings.config"
+    cfg = entries[name].decode()
+
+    def add(m):
+        extra = "".join(f'\n    <metadata key="{k}" value="{v}"/>'
+                        for key, settings in object_settings.items() if key in m.group(1)
+                        for k, v in settings.items())
+        return m.group(0) + extra
+
+    entries[name] = re.sub(r'<object id="\d+">\n    <metadata key="name" value="([^"]+)"/>', add, cfg).encode()
+    with zipfile.ZipFile(project, "w", zipfile.ZIP_DEFLATED) as z:
+        for fname, data in entries.items():
+            z.writestr(fname, data)
+
+
 def slice_model(
     model: Path | list[tuple[Path, int]],
     process: str = PROCESS,
@@ -107,10 +131,16 @@ def slice_model(
     out_dir: Path | None = None,
     arrange: bool = True,
     name: str | None = None,
+    filament_overrides: dict | None = None,
+    object_settings: dict | None = None,
 ) -> SliceResult:
     """Slice one model, or a plate of several: model=[(stl, copies), ...].
 
-    Cloning only works for STL inputs; a 3MF is sliced as-is.
+    Cloning only works for STL inputs; a 3MF is sliced as-is. filament_overrides change the
+    filament preset (per-extruder values are lists, e.g. {"nozzle_temperature": ["210"]}).
+    object_settings give some objects their own values, matched by file name:
+    {"keycap": {"layer_height": "0.1"}}. The plate is then exported as a project first,
+    those objects are patched, and the project is sliced with its own settings.
     """
     plate = [(Path(model), copies)] if not isinstance(model, list) else [(Path(m), n) for m, n in model]
     plate = [(m.resolve(), n) for m, n in plate]
@@ -118,29 +148,39 @@ def slice_model(
     out_dir = Path(out_dir or first.parent).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
     overrides = overrides or {}
-    proc_over = {k: v for k, v in overrides.items()}
+    proc_over = {"curr_bed_type": BED, **overrides}
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
         machine = _write_profile("machine", MACHINE, {}, tmp)
         proc = _write_profile("process", process, proc_over, tmp)
-        fil = _write_profile("filament", FILAMENT, {}, tmp)
+        fil = _write_profile("filament", FILAMENT, filament_overrides or {}, tmp)
         out = out_dir / f"{name or first.stem}.gcode.3mf"
+        project = tmp / "project.3mf"
         cmd = [
             str(BINARY),
             "--load-settings", f"{machine};{proc}",
             "--load-filaments", str(fil),
             "--arrange", "1" if arrange else "0",
-            "--slice", "0",
-            "--outputdir", str(out_dir),
-            "--export-3mf", out.name,
         ]
+        if object_settings:   # export the arranged plate, patch it, then slice it as a project
+            cmd += ["--outputdir", str(tmp), "--export-3mf", project.name]
+        else:
+            cmd += ["--slice", "0", "--outputdir", str(out_dir), "--export-3mf", out.name]
         if any(n > 1 for _, n in plate):
             cmd += ["--clone-objects", ",".join(str(n) for _, n in plate)]
         cmd += [str(m) for m, _ in plate]
-        run = subprocess.run(cmd, capture_output=True, text=True, cwd=tmp)  # CLI drops files in cwd
-        if run.returncode != 0 or not out.exists():
-            tail = "\n".join((run.stdout + run.stderr).splitlines()[-25:])
-            raise RuntimeError(f"Bambu Studio slicing failed ({run.returncode}):\n{tail}")
+        runs = [cmd]
+        if object_settings:
+            runs.append([str(BINARY), "--slice", "0", "--outputdir", str(out_dir), "--export-3mf", out.name,
+                         str(project)])
+        for i, c in enumerate(runs):
+            run = subprocess.run(c, capture_output=True, text=True, cwd=tmp)  # CLI drops files in cwd
+            done = project if (object_settings and i == 0) else out
+            if run.returncode != 0 or not done.exists():
+                tail = "\n".join((run.stdout + run.stderr).splitlines()[-25:])
+                raise RuntimeError(f"Bambu Studio slicing failed ({run.returncode}):\n{tail}")
+            if object_settings and i == 0:
+                _object_settings(project, object_settings)
     for stray in [out_dir / "result.json", *out_dir.glob("plate_*.gcode")]:
         stray.unlink(missing_ok=True)        # CLI side files; everything is inside the 3MF
     _make_gui_loadable(out, process, proc_over)

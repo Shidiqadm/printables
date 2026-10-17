@@ -59,6 +59,10 @@ The hub's blue dot pulses slowly while it connects, glows dimly once Home Assist
    Later updates go over Wi-Fi: **Install → Wirelessly**.
 5. Plug the hub into one of the Pi's USB ports (or any USB charger). Home Assistant finds it under Settings → Devices & services. Add it and paste the `hk_hub_api_key`.
 
+**Flashing from a Mac instead:** put the secrets above in `gateway/secrets.yaml` (git ignores it), plug the SuperMini in and run `esphome run hk-hub.yaml` from `gateway/`. Pick the USB port the first time.
+
+**If the log shows `Auth Expired` and it never joins Wi-Fi:** that is the SuperMini's badly matched antenna. `hk-hub.yaml` already sets `output_power: 8.5dB`, which fixed it here (2026-10-17). If it still fails, move it closer to the router for the first connection.
+
 Give your router's 2.4 GHz band a fixed channel (1, 6 or 11) if you can. ESP-NOW has to use the same channel as the hub's Wi-Fi. The remote finds a new channel by itself, but the first press after a change is slower.
 
 ## 2. Flash the remote
@@ -68,12 +72,15 @@ You need PlatformIO: the VS Code extension, or `uv tool install platformio`.
 1. Optional: open `remote/src/config.h` and change the settings: `HK_REMOTE_ID` for a second remote, `BATT_CAL`, timings, dot brightness, `BUZZER_ENABLED`.
 2. Connect the XIAO to the computer with USB-C, then run:
    ```bash
-   cd projects/ha-macropad/firmware/remote && pio run -t upload
+   sh projects/ha-macropad/firmware/remote/flash.sh
    ```
-   If it can't find the port, hold BOOT, tap RESET, release BOOT and try again.
+   It waits for the XIAO on any USB port, flashes it and opens its log. If the XIAO is asleep (no port), unplug it, hold BOOT, plug it in and release BOOT.
+   After a flash started from the BOOT button, the XIAO may stay in the bootloader: tap RESET once.
 3. It boots with a 1→4 sweep and rising tones, then looks for the hub. A low buzz straight after means no hub answered: start the hub first, then press a key.
 
 There is no pairing. The remote broadcasts on each channel until a hub answers, then remembers the hub and its channel until the battery is disconnected. To tie it to one hub, set `HK_GATEWAY_MAC`.
+
+**Bench test before wiring:** set `HK_DEBUG 1`, flash, and run `sh projects/ha-macropad/firmware/remote/monitor.sh` (it reconnects by itself after a reset or a sleep). Touch D0 to GND with a wire: the log shows `gesture key=1 kind=1` (1 = single, 2 = double, 3 = long) and `gateway on channel …`, and Home Assistant gets an `esphome.hk_press` event. With no LiPo or divider fitted, the battery reads 0 (no cell) and is ignored. Set `HK_DEBUG 0` and flash again before running on the battery: logging keeps it awake longer.
 
 **Re-flashing inside the case:** plug the USB-C into a computer and press any key. While a computer (not a charger) is connected, the remote stays awake, so `pio run -t upload` works. Set `HK_DEBUG 1` for logs (`pio device monitor`).
 

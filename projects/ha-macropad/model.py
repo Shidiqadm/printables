@@ -20,7 +20,7 @@ from build123d import Align, Box, FontStyle, Pos, Text, extrude  # noqa: E402
 import hub  # noqa: E402
 import radar  # noqa: E402
 import remote  # noqa: E402
-from keycap import STEM_DEPTH, STEM_SLOP, stem_socket_post  # noqa: E402
+from keycap import STEM_SLOP, stem_test_post  # noqa: E402
 from printlib import check, export, preview  # noqa: E402
 from style import FONT, label_stroke_ok  # noqa: E402
 
@@ -28,10 +28,25 @@ OUT = Path(__file__).parent / "output"
 CEN_MIN = (Align.CENTER, Align.CENTER, Align.MIN)
 
 
+def stem_test():
+    """A bar with five keycap posts, stem sockets from tight to loose. The posts are the
+    cap's own post (5.5 mm, chamfered tip), so they also go into a box stem's square rim.
+    Turn the bar over and push a post onto a switch."""
+    slops = [round(STEM_SLOP + d, 2) for d in (-0.10, -0.05, 0.0, 0.05, 0.10)]
+    pitch = 12.6
+    body = Box(pitch * len(slops) + 3, 20, 1.2, align=(Align.MIN, Align.MIN, Align.MIN))
+    for i, s in enumerate(slops):
+        x = 3 + 6 + i * pitch
+        body += Pos(x, 7, 1.2 - 0.01) * stem_test_post(s)
+        txt = Text(f"{int(round(s * 100)):02d}", font_size=4.0, font=FONT, font_style=FontStyle.BOLD)
+        body -= Pos(x, 15.5, 0.6) * extrude(txt, amount=0.61)
+    return body
+
+
 def fit_coupon():
     """One piece: a strip of plate as thick as the real one with three switch-hole sizes,
-    and a bar with five stem sockets from loose to tight. Both print the same way up as the
-    real parts (plate top and socket mouths on the bed). About 10 minutes to print."""
+    and the stem-test bar. The plate strip prints top-down like the real plate. About 10
+    minutes to print."""
     holes = [round(remote.SWITCH_HOLE - 0.1, 2), remote.SWITCH_HOLE, round(remote.SWITCH_HOLE + 0.1, 2)]
     pitch = 21.0
     width = pitch * len(holes) + 3
@@ -41,14 +56,7 @@ def fit_coupon():
         body -= Pos(x, 11.5, -0.01) * Box(s, s, remote.PLATE + 0.02, align=CEN_MIN)
         txt = Text(f"{s:.1f}", font_size=3.5, font=FONT, font_style=FontStyle.BOLD)
         body -= Pos(x, 23.0, remote.PLATE - 0.6) * extrude(txt, amount=0.61)
-    body += Pos(0, 26 - 0.01, 0) * Box(width, 20, 1.2, align=(Align.MIN, Align.MIN, Align.MIN))
-    slops = [round(STEM_SLOP + d, 2) for d in (-0.10, -0.05, 0.0, 0.05, 0.10)]
-    for i, s in enumerate(slops):
-        x = 3 + 6 + i * 12.6
-        body += Pos(x, 33, 0) * stem_socket_post(s, STEM_DEPTH + 1.0)
-        txt = Text(f"{int(round(s * 100)):02d}", font_size=4.0, font=FONT, font_style=FontStyle.BOLD)
-        body -= Pos(x, 41.5, 0.6) * extrude(txt, amount=0.61)
-    return body
+    return body + Pos(0, 26 - 0.01, 0) * stem_test()
 
 
 def export_parts(slug, poses, assembly):
@@ -95,9 +103,11 @@ def run_radar(kind):
 
 
 def run_coupon():
-    body = fit_coupon()
+    body, stems = fit_coupon(), stem_test()
     check(body, "fit coupon")
+    check(stems, "stem test")
     export(body, "fit-coupon", out_dir=OUT / "coupon")
+    export(stems, "stem-test", out_dir=OUT / "coupon")  # the stem half alone, for a quick reprint
     return [body], ["fit coupon"]
 
 

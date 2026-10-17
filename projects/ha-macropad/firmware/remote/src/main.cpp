@@ -313,6 +313,10 @@ void interactive(bool cold) {
 void setup() {
   Serial.begin(115200);
   Serial.setTxTimeoutMs(0);  // never block when no computer is listening
+#if HK_DEBUG
+  // Give the computer's serial monitor up to 2 s to attach, so the first lines aren't lost.
+  for (const uint32_t t = millis(); !Serial && millis() - t < 2000;) delay(10);
+#endif
 
   const esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
   const uint8_t wake_pins =
@@ -330,6 +334,7 @@ void setup() {
 
   // Battery first, before the radio loads the cell.
   rtc.batt_mv = sensors::battery_mv();
+  LOG("battery %u mV (0 = no cell)\n", rtc.batt_mv);
   if (rtc.shutdown) {
     if (rtc.batt_mv < BATT_RESUME_MV) sleep_now();
     rtc.shutdown = false;  // charged again: start like a fresh boot

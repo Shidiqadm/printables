@@ -30,7 +30,7 @@ from build123d import (
     SlotCenterToCenter, chamfer, extrude, loft,
 )
 
-from keycap import CAP, CAP_R, make_keycap
+from keycap import CAP, CAP_H, CAP_R, make_keycap
 from printlib import A1, fit
 from style import (
     BASE, CEN_MIN, CRADLE_LIP, CRADLE_WALL, DECK, HOLE_CHAMFER, LEDGE_W, POCKET_CLEAR, WALL,
@@ -459,7 +459,7 @@ def mx_switch(x, y, P):
     top += loft([Pos(x, y, P + SW_FLANGE_H) * RectangleRounded(SW_TOP_BOTTOM, SW_TOP_BOTTOM, 1.0),
                  Pos(x, y, P + SW_ABOVE) * RectangleRounded(SW_TOP_TOP, SW_TOP_TOP, 1.0)])
     top -= Pos(x, y, P - 0.01) * Cylinder(SW_SLIDER_D / 2, SW_ABOVE + 0.02, align=CEN_MIN)
-    stem = (Pos(x, y, P + SW_ABOVE) * Box(4.0, 1.25, SW_STEM, align=CEN_MIN)
+    stem = (Pos(x, y, P + SW_ABOVE) * Box(4.0, 1.32, SW_STEM, align=CEN_MIN)  # thick / thin arm
             + Pos(x, y, P + SW_ABOVE) * Box(1.1, 4.0, SW_STEM, align=CEN_MIN))
     below = Pos(x, y, P - SW_BELOW) * Box(13.9, 13.9, SW_BELOW - PLATE, align=CEN_MIN)
     z_pins = P - SW_BELOW - SW_PINS
@@ -531,5 +531,5 @@ def print_poses(a: SimpleNamespace) -> dict:
         "shell-ams": {"shell": flip * a.shell, "dots": flip * a.dots},
         "plate": plate_flip * a.plate,
         "base": {"base": a.base, "label": a.label},
-        "keycap": a.cap,
+        "keycap": Pos(0, 0, CAP_H) * Rot(180, 0, 0) * a.cap,  # top on the bed
     }
