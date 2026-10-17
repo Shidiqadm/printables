@@ -101,6 +101,8 @@ It also fires bus events, which are the easiest thing to automate on:
 
 Example automation (Settings → Automations → ⋮ → Edit in YAML). Change the scene and light names to yours:
 
+Compare `key` as text (`key | string == '1'`): Home Assistant turns template variables into native types, so a plain `key == '1'` never matches (the key arrives as the number 1).
+
 ```yaml
 alias: HK remote
 mode: queued
@@ -112,34 +114,34 @@ variables:
   press: "{{ trigger.event.data.press }}"
 actions:
   - choose:
-      - conditions: "{{ key == '1' and press == 'single' }}"
+      - conditions: "{{ key | string == '1' and press == 'single' }}"
         sequence:
           - action: esphome.hk_hub_show_dot
             data: { key: 1 }
           - action: scene.turn_on
             target: { entity_id: scene.living_room_relax }
-      - conditions: "{{ key == '2' and press == 'single' }}"
+      - conditions: "{{ key | string == '2' and press == 'single' }}"
         sequence:
           - action: esphome.hk_hub_show_dot
             data: { key: 2 }
           - action: scene.turn_on
             target: { entity_id: scene.living_room_bright }
-      - conditions: "{{ key == '3' and press == 'single' }}"
+      - conditions: "{{ key | string == '3' and press == 'single' }}"
         sequence:
           - action: light.toggle
             target: { entity_id: light.desk_lamp }
-      - conditions: "{{ key == '3' and press == 'double' }}"
+      - conditions: "{{ key | string == '3' and press == 'double' }}"
         sequence:
           - action: light.turn_on
             target: { entity_id: light.desk_lamp }
             data: { brightness_pct: 100 }
-      - conditions: "{{ key == '4' and press == 'long' }}"
+      - conditions: "{{ key | string == '4' and press == 'long' }}"
         sequence:
           - action: esphome.hk_hub_show_dot
             data: { key: 0 }
           - action: light.turn_off
             target: { area_id: living_room }
-      - conditions: "{{ key == '1+3' }}"
+      - conditions: "{{ key | string == '1+3' }}"
         sequence:
           - action: scene.turn_on
             target: { entity_id: scene.movie }
