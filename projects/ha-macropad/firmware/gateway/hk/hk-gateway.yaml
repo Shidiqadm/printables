@@ -1,0 +1,334 @@
+# HK gateway package: receives the HK remote over ESP-NOW and turns it into Home Assistant
+# events, event entities and sensors. Include it from a device config: hk-hub.yaml, or a
+# radar pod's config (see ../../README.md).
+#
+# The byte offsets in the lambdas below follow ../../remote/src/hk_protocol.h. Change both
+# together.
+
+substitutions:
+  hk_led_pin: GPIO8         # SuperMini blue LED, active-low
+  hk_led_idle: "6"          # status dot brightness in % while connected (0 = off)
+  hk_dot_seconds: "1.0"     # how long the remote shows a scene-state dot
+
+wifi:
+  # ESP-NOW only receives while the radio is awake, so no Wi-Fi power saving.
+  power_save_mode: none
+
+api:
+  on_client_connected:
+    - script.execute: hk_led_idle
+  on_client_disconnected:
+    - script.execute: hk_led_idle
+  actions:
+    # Light the dot for the scene that's now on: key 1-4, or 0 for none. Call it from the
+    # automation that handles the press; the remote listens for 1.5 s after each press.
+    - action: show_dot
+      variables:
+        key: int
+      then:
+        - lambda: |-
+            id(hk_dots_used) = true;
+            id(hk_presses_without_dot) = 0;
+            if (millis() - id(hk_remote_seen) > 3000) {
+              ESP_LOGD("hk", "show_dot %d: the remote is asleep", (int) key);
+              return;
+            }
+            const uint8_t mask = (key >= 1 && key <= 4) ? (1 << (key - 1)) : 0;
+            const std::vector<uint8_t> pkt = {'H', 'K', 1, 0x82, (uint8_t) id(hk_dots_seq)++, mask,
+                                              (uint8_t) (${hk_dot_seconds} * 10)};
+            id(hk_espnow).send(id(hk_remote_mac).data(), pkt);
+
+esphome:
+  on_boot:
+    - script.execute: hk_led_idle
+
+globals:
+  - id: hk_dots_used        # Home Assistant has called show_dot: tell the remote to listen
+    type: bool
+    restore_value: true
+    initial_value: "false"
+  - id: hk_presses_without_dot  # after 20 presses with no show_dot, stop asking the remote to wait
+    type: uint8_t
+    initial_value: "0"
+  - id: hk_dots_seq
+    type: uint8_t
+    initial_value: "0"
+  - id: hk_remote_mac
+    type: std::array<uint8_t, 6>
+  - id: hk_remote_seen
+    type: uint32_t
+    initial_value: "0"
+  - id: hk_last_packet      # MAC + sequence number of the last packet, to drop retries
+    type: uint64_t
+    initial_value: "0"
+  - id: hk_last_packet_ms
+    type: uint32_t
+    initial_value: "0"
+  - id: hk_fire             # set by the parser: 1 = press, 2 = status
+    type: uint8_t
+    initial_value: "0"
+  - id: hk_key
+    type: std::string
+  - id: hk_press
+    type: std::string
+  - id: hk_status
+    type: std::string
+  - id: hk_remote_id
+    type: uint8_t
+    initial_value: "1"
+
+espnow:
+  id: hk_espnow
+  auto_add_peer: true
+  on_receive:
+    - then: &hk_packet
+        - lambda: |-
+            id(hk_fire) = 0;
+            // Remote -> gateway message: 13 bytes, see hk_protocol.h (struct Msg).
+            if (size < 13 || data[0] != 'H' || data[1] != 'K' || data[2] != 1) return;
+            const uint8_t type = data[3], seq = data[4];
+
+            // Ack straight away, so the remote can flash its dot and go back to sleep.
+            // Home Assistant subscribes to states; a log viewer alone doesn't count.
+            const bool ha = api::global_api_server != nullptr &&
+                            api::global_api_server->is_connected_with_state_subscription();
+            const bool dots = id(hk_dots_used) && id(hk_presses_without_dot) < 20;
+            const std::vector<uint8_t> ack = {'H', 'K', 1, 0x81, seq,
+                                              (uint8_t) ((ha ? 1 : 0) | (dots ? 2 : 0)),
+                                              id(hk_espnow).get_wifi_channel()};
+            id(hk_espnow).send(info.src_addr, ack);
+            memcpy(id(hk_remote_mac).data(), info.src_addr, 6);
+            id(hk_remote_seen) = millis();
+
+            // A retry of a packet we already handled (its ack got lost): ack only.
+            uint64_t tag = 0;
+            for (int i = 0; i < 6; i++) tag = (tag << 8) | info.src_addr[i];
+            tag = (tag << 8) | seq;
+            if (tag == id(hk_last_packet) && millis() - id(hk_last_packet_ms) < 10000) return;
+            id(hk_last_packet) = tag;
+            id(hk_last_packet_ms) = millis();
+
+            // Every message carries battery, light and flags.
+            id(hk_remote_id) = data[5];
+            const uint16_t mv = data[8] | (data[9] << 8);
+            const uint16_t lux = data[10] | (data[11] << 8);
+            const uint8_t flags = data[12];
+            if (mv > 0) id(hk_battery_v).publish_state(mv / 1000.0f);
+            if (lux != 0xFFFF) id(hk_light).publish_state(lux);
+            id(hk_keys_off).publish_state(flags & 1);
+            id(hk_battery_low).publish_state(flags & 2);
+            if (info.rx_ctrl != nullptr) id(hk_signal).publish_state(info.rx_ctrl->rssi);
+
+            if (type == 1) {  // key press
+              static const char *const KEYS[] = {"", "1", "2", "3", "4", "1+3", "2+3", "3+4"};
+              static const char *const PRESSES[] = {"", "single", "double", "long"};
+              const uint8_t k = data[6], p = data[7];
+              if (k < 1 || k > 7 || p < 1 || p > 3) return;
+              event::Event *const events[] = {nullptr, id(hk_key_1), id(hk_key_2), id(hk_key_3),
+                                              id(hk_key_4), id(hk_keys_13), id(hk_keys_23), id(hk_keys_34)};
+              events[k]->trigger(PRESSES[p]);
+              if (id(hk_presses_without_dot) < 255) id(hk_presses_without_dot)++;
+              id(hk_key) = KEYS[k];
+              id(hk_press) = PRESSES[p];
+              id(hk_fire) = 1;
+              ESP_LOGI("hk", "key %s %s", KEYS[k], PRESSES[p]);
+            } else if (type == 3) {  // status
+              static const char *const STATUS[] = {"", "boot", "on", "off", "shutdown"};
+              const uint8_t s = data[7];
+              if (s < 1 || s > 4) return;
+              id(hk_status) = STATUS[s];
+              id(hk_fire) = 2;
+              ESP_LOGI("hk", "remote %s", STATUS[s]);
+            }
+        - if:
+            condition:
+              lambda: "return id(hk_fire) == 1;"
+            then:
+              - homeassistant.event:
+                  event: esphome.hk_press
+                  data:
+                    key: !lambda "return id(hk_key);"
+                    press: !lambda "return id(hk_press);"
+                    remote: !lambda "return to_string(id(hk_remote_id));"
+              - script.execute: hk_led_flash
+        - if:
+            condition:
+              lambda: "return id(hk_fire) == 2;"
+            then:
+              - homeassistant.event:
+                  event: esphome.hk_status
+                  data:
+                    status: !lambda "return id(hk_status);"
+                    remote: !lambda "return to_string(id(hk_remote_id));"
+  on_broadcast:
+    # The remote broadcasts only while it looks for the gateway's channel.
+    - then: *hk_packet
+
+event:
+  - platform: template
+    id: hk_key_1
+    name: "Key 1"
+    device_class: button
+    event_types: [single, double, long]
+  - platform: template
+    id: hk_key_2
+    name: "Key 2"
+    device_class: button
+    event_types: [single, double, long]
+  - platform: template
+    id: hk_key_3
+    name: "Key 3"
+    device_class: button
+    event_types: [single, double, long]
+  - platform: template
+    id: hk_key_4
+    name: "Key 4"
+    device_class: button
+    event_types: [single, double, long]
+  - platform: template
+    id: hk_keys_13
+    name: "Keys 1+3"
+    device_class: button
+    event_types: [single, double, long]
+  - platform: template
+    id: hk_keys_23
+    name: "Keys 2+3"
+    device_class: button
+    event_types: [single, double, long]
+  - platform: template
+    id: hk_keys_34
+    name: "Keys 3+4"
+    device_class: button
+    event_types: [single, double, long]
+
+sensor:
+  - platform: template
+    id: hk_light
+    name: "Remote light level"
+    unit_of_measurement: lx
+    device_class: illuminance
+    state_class: measurement
+    accuracy_decimals: 0
+    update_interval: never
+  - platform: template
+    id: hk_battery_v
+    name: "Remote battery voltage"
+    unit_of_measurement: V
+    device_class: voltage
+    state_class: measurement
+    entity_category: diagnostic
+    accuracy_decimals: 2
+    update_interval: never
+  - platform: copy
+    source_id: hk_battery_v
+    name: "Remote battery"
+    unit_of_measurement: "%"
+    device_class: battery
+    state_class: measurement
+    accuracy_decimals: 0
+    filters:
+      # LiPo resting voltage to charge, lightly loaded. 3.40 V is where the remote shuts off.
+      - lambda: |-
+          static const float V[] = {3.40, 3.61, 3.69, 3.73, 3.77, 3.80, 3.84, 3.87, 3.95, 4.02, 4.11, 4.20};
+          static const float P[] = {0, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100};
+          if (x <= V[0]) return 0.0f;
+          for (int i = 1; i < 12; i++)
+            if (x < V[i]) return P[i - 1] + (P[i] - P[i - 1]) * (x - V[i - 1]) / (V[i] - V[i - 1]);
+          return 100.0f;
+  - platform: template
+    id: hk_signal
+    name: "Remote signal"
+    unit_of_measurement: dBm
+    device_class: signal_strength
+    state_class: measurement
+    entity_category: diagnostic
+    accuracy_decimals: 0
+    update_interval: never
+
+binary_sensor:
+  - platform: template
+    id: hk_keys_off
+    name: "Remote keys off"
+    icon: mdi:keyboard-off-outline
+  - platform: template
+    id: hk_battery_low
+    name: "Remote battery low"
+    device_class: battery
+
+# ---- Status dot: slow pulse = connecting, steady dim = connected, flash = press relayed
+
+output:
+  - platform: ledc
+    id: hk_led_out
+    pin:
+      number: ${hk_led_pin}
+      inverted: true
+      # The SuperMini's LED hangs off this strapping pin from 3V3, which keeps it high at boot.
+      ignore_strapping_warning: true
+
+light:
+  - platform: monochromatic
+    id: hk_led
+    output: hk_led_out
+    internal: true
+    restore_mode: ALWAYS_OFF
+    gamma_correct: 2.8
+    default_transition_length: 200ms
+    effects:
+      - pulse:
+          name: connecting
+          transition_length: 1s
+          update_interval: 1s
+          min_brightness: 0%
+          max_brightness: 40%
+
+number:
+  - platform: template
+    id: hk_led_brightness
+    name: "Status dot brightness"
+    icon: mdi:led-on
+    entity_category: config
+    unit_of_measurement: "%"
+    min_value: 0
+    max_value: 100
+    step: 1
+    initial_value: ${hk_led_idle}
+    optimistic: true
+    restore_value: true
+    on_value:
+      - script.execute: hk_led_idle
+
+script:
+  - id: hk_led_idle
+    mode: restart
+    then:
+      - if:
+          condition:
+            api.connected:
+          then:
+            - if:
+                condition:
+                  lambda: "return id(hk_led_brightness).state > 0;"
+                then:
+                  - light.turn_on:
+                      id: hk_led
+                      effect: none
+                      brightness: !lambda "return id(hk_led_brightness).state / 100.0f;"
+                else:
+                  - light.turn_off: hk_led
+          else:
+            - light.turn_on:
+                id: hk_led
+                effect: connecting
+  - id: hk_led_flash
+    mode: restart
+    then:
+      - light.turn_on:
+          id: hk_led
+          effect: none
+      - light.turn_on:
+          id: hk_led
+          brightness: 100%
+          transition_length: 0s
+      - delay: 150ms
+      - script.execute: hk_led_idle

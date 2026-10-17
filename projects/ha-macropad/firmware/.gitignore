@@ -1,0 +1,6 @@
+# Build output (regenerable)
+remote/.pio/
+remote/.vscode/
+gateway/.esphome/
+# Keep Wi-Fi passwords and API keys out of the repo
+gateway/secrets.yaml
