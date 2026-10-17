@@ -1,7 +1,7 @@
 # HK — Home Keys
 
-**Status:** test-print (v0.7, redesigned, not yet printed)
-**Created:** 2026-10-08 · **Redesigned:** 2026-10-16
+**Status:** test-print (v0.8: clips and print settings after the first HK-22 print)
+**Created:** 2026-10-08 · **Redesigned:** 2026-10-16 · **Updated:** 2026-10-17
 **Inspiration:** [Hot-Swappable, Multi-Layer Macropad](https://makerworld.com/en/models/2495365-hot-swappable-multi-layer-macropad) by Aaron Broom. We kept the idea of keys sunk into a case with front status lights. We use normal MX switches (Outemu), because Gateron low-profile switches are hard to get in India.
 
 ## Purpose
@@ -30,8 +30,9 @@ Source (one folder, split by job):
 |------|------|
 | `model.py` | Builds, checks, previews and exports everything: `uv run projects/ha-macropad/model.py [hk4 hk22 hub ld2410c ld2450 coupon]` (default: all) |
 | `test_fit.py` | Interference and fit checks for every assembly: `uv run projects/ha-macropad/test_fit.py` (must print ALL OK) |
+| `print_plan.py` | Slices ready-to-print plates with the quality settings baked in: `uv run projects/ha-macropad/print_plan.py [hk22 hk4]` |
 | `style.py` | Shared look and parts: body, base, V seam, USB-C port, insert bosses, label, interference check |
-| `remote.py` | The remote in both layouts: shell, switch plate, base, and bought-part models for the fit check |
+| `remote.py` | The remote in both layouts: shell, switch plate, base, the plate snaps and light-sensor cradle, and bought-part models for the fit check |
 | `keycap.py` | Keycap |
 | `hub.py`, `radar.py` | Hub; both radar pods and their bracket |
 
@@ -39,6 +40,7 @@ Output (`output/<part>/`, rebuilt by `model.py`; every part is already in print 
 
 | File | Print | Colour |
 |------|-------|--------|
+| `hk22/print/1_shell.gcode.3mf`, `2_plate_base…`, `3_keycaps…` | **print these** (from `print_plan.py`) | sliced, with the settings below; same for `hk4/print/` |
 | `hk4/hk4-shell.3mf` | 1 | body colour (Graphite / Charcoal matte PLA) |
 | `hk4/hk4-shell-ams.3mf` | instead of the above, if you want diffused dots | shell + clear or white "dots" (AMS) |
 | `hk4/hk4-plate.3mf` | 1 | body colour, or black so the gaps round the keys look deeper |
@@ -55,7 +57,8 @@ Output (`output/<part>/`, rebuilt by `model.py`; every part is already in print 
 | What | Value | Source |
 |------|-------|--------|
 | Key spacing / keycap | 19.05 / 18.0 mm | MX standard (ai03 switch spec) |
-| Switch plate hole / plate | 14.0 (+0.1 printed) / 1.5 mm | Cherry MX datasheet: 14.00 ±0.05, plate 1.5 ±0.1 |
+| Switch plate hole / plate | 14.0 / 1.6 mm | Cherry MX datasheet: 14.00 ±0.05, plate 1.5 ±0.1. 1.6 is 8 whole layers (a 1.5 mm plate slices to 1.4) and the usual FR4 plate thickness |
+| Plate snaps | 1.0 mm beam, 0.8 mm slot, 28.8 mm free length; barb 0.5 mm past the well wall | design: 0.72 % bending strain when it clicks in |
 | Switch below plate / pins / above / stem / travel | 5.0 / 3.3 / 6.6 / 3.6 / 4.0 mm | Cherry MX datasheet |
 | Stem socket | cross 4.1 × 1.17 + 0.20 slop, 4.0 deep | Cherry keycap socket spec (via Deskthority); slop set by the fit coupon |
 | Key well | plate 3.0 mm below the deck, 0.8 mm gap round the caps | design |
@@ -67,6 +70,7 @@ Output (`output/<part>/`, rebuilt by `model.py`; every part is already in print 
 | SuperMini USB-C past the PCB edge | 1.0 mm | **guess: measure yours** (`SM_USB_OVERHANG` in `hub.py` and `radar.py`) |
 | LiPo 502540 | 5.3 × 25 × 43 mm modelled (bay 25.2 × 43.2) | name gives the bare cell; the folded protection board adds 2–3 mm |
 | BH1750 module (GY-302) | 18.5 × 13.9 × 1.6 mm; chip 3.0 × 1.6 × 0.75 | seller listing; BH1750FVI datasheet. Chip offset and regulator height are not published |
+| Light-sensor cradle | 0.84 mm beams, 0.4 mm lips, 1.4 mm room over the board (1.2 mm tallest part + 0.2) | design: 1.44 % bending strain when the board clicks in |
 | Buzzer 12085 | Ø12 × 8.5 mm, pins 6.5 mm apart | CEM-1203(42) datasheet |
 | FPC antenna | 40 × 7.5 mm slim type | see note below |
 | M2 heat-set insert | 3.2 mm hole, 5 mm deep | Ruthex M2: Ø3.6 × 4 mm, hole 3.1–3.2, ≥1.3 mm wall (bosses have 1.6) |
@@ -77,6 +81,34 @@ Output (`output/<part>/`, rebuilt by `model.py`; every part is already in print 
 **Antenna:** Seeed's current antenna for the XIAO ESP32-C3 (drawing dated 2024-10-08) is a 40 × 20 mm FPC. It is too wide to stand inside the 20 mm-tall body. The model reserves space for a slim 2.4 GHz FPC antenna with a U.FL (IPEX) plug, about 40 × 7.5 mm, stuck to the inside of the front wall (bar) or the right wall (square). Older XIAO antennas, or a slim one from Robu or Amazon.in, fit there. Measure yours; if it differs, change `ANT_L` / `ANT_W` in `remote.py` and run `test_fit.py`.
 
 **Tolerances:** `tolerances.toml` still holds the uncalibrated defaults. Print `calibration/tolerance_coupon` and this project's `fit-coupon` before the full set.
+
+## What changed in v0.8
+
+The first HK-22 print (2026-10-17) showed three problems. v0.8 fixes them:
+
+- **The plate was loose.** It only rested on its ledge, so it lifted when a keycap was pulled.
+  It now clicks in. A slot along two opposite edges frees a 1.0 mm beam in the plate. A barb
+  on each beam snaps into a pocket under the well wall. The beam bends in the plate's own
+  plane, along the printed lines, so it is strong, and the barb's catch face prints on the
+  bed. The pockets are open at the bottom, so the shell still needs no supports.
+- **The light sensor was loose.** Nothing held the BH1750 up. It now snaps into a cradle that
+  hangs from the deck: two beams on corner posts, with lips that click under the board's long
+  edges. Corner tabs stop it on top. The beams print as short bridges between the posts and
+  bend sideways, along the printed lines.
+- **Gaps in the print.** Every layer of the sliced G-code was compared with the model's
+  cross-section. With Bambu's default (classic) walls, small voids were left round the speaker
+  grille holes, round the LED dots on the deck face, and in the plate's corners: in these
+  places a wall is not a whole number of lines wide. Arachne walls fill them (the shell's
+  unfilled area dropped from 46 to 8 mm², and the plate's to nearly zero). `print_plan.py`
+  now ships sliced files with Arachne, slow outer walls and a slow first layer (see
+  *Print settings*).
+- **Smaller fixes:**
+  - The plate is now 1.6 mm (8 whole layers); 1.5 mm sliced to 1.4.
+  - The shell is turned over left-to-right for printing, so a "Back" seam lands on the USB-C
+    wall instead of the front.
+  - The light sensor has 0.2 mm more room over its tallest part.
+  - The switch holes are 14.0 mm, as the fit coupon showed. They were 14.0 + 0.1 clearance,
+    and the switches sat loose in the printed plate.
 
 ## What changed in v0.7
 
@@ -161,7 +193,39 @@ Battery life is an estimate: about 4–5 months per charge with normal use.
 
 ## Print settings (Bambu Studio, A1, PLA)
 
-Print times are from a headless Bambu Studio slice (`uv run slice`), Bambu PLA Basic, 0.20 mm Standard unless noted:
+**Print the sliced files.** Run `uv run projects/ha-macropad/print_plan.py hk22` (or `hk4`)
+after `model.py`, then open the files in `output/hk22/print/` in Bambu Studio and print them
+as they are:
+
+| File | Process | Time | PLA |
+|------|---------|------|-----|
+| `1_shell.gcode.3mf` | 0.20 mm Standard + the changes below, outer walls 60 mm/s at 2000 mm/s², inner walls 150 mm/s | 48 min | 16.8 g |
+| `2_plate_base.gcode.3mf` | 0.20 mm Standard + the changes below | 21 min | 10.5 g |
+| `3_keycaps.gcode.3mf` (× 4) | 0.12 mm High Quality + the changes below. Set one cap to the orange filament | 26 min | 4.5 g |
+
+The changes from Bambu's presets, and why:
+
+- **Wall generator: Arachne.** The classic generator leaves small voids where a wall is not a
+  whole number of 0.42 mm lines wide: round the speaker grille, round the LED dots on the
+  deck face, and in the plate. Arachne varies the line width to fill them.
+- **Wall loops: 3.**
+- **First layer at 30 mm/s, first-layer solid infill at 60 mm/s.** The shell's deck (the face
+  you see) and the base's underside are the first layer. Slower lines fuse without gaps.
+- **Seam: Back.** It lands on the USB-C wall.
+- **Avoid crossing walls: on.** Travel moves go round the walls, not across the visible ones.
+- **Slow outer walls on the shell** (the High Quality values). Kept at 0.20 mm layers,
+  because every height in the model (plate seat, snap catches, sensor cradle) sits on a
+  0.2 mm layer line.
+
+If the deck face still shows gaps between lines, the slicer is not the cause. Check these:
+
+- Wash the plate with dish soap and water.
+- Make sure you use the textured PEI side.
+- Run the printer's bed levelling.
+- Dry the filament if it crackles or strings. Wet PLA under-extrudes.
+
+Times for the other parts, from a headless slice (`uv run slice`), Bambu PLA Basic, 0.20 mm
+Standard unless noted:
 
 | Part | Orientation (as exported) | Time | PLA | Notes |
 |------|--------------------------|------|-----|-------|
@@ -175,7 +239,7 @@ Print times are from a headless Bambu Studio slice (`uv run slice`), Bambu PLA B
 | LD2410C pod / bracket | window down / flat bottom | 10 / 18 min | 3.6 / 6.5 g | |
 | LD2450 pod / bracket | window down / flat bottom | 13 / 22 min | 6.2 / 10.9 g | |
 
-A full HK-4 (coupon excluded) is about 1 h 20 min and 33 g. Use 3 walls and 15% infill everywhere, with no supports and no brim. The bed edges of the shells, plates, bases, keycaps and radar pods are chamfered, so leave elephant-foot compensation at the preset.
+A full HK-4 from `print_plan.py` is about 1 h 40 min and 33 g. Elsewhere, use 3 Arachne walls and 15% infill, with no supports and no brim. The bed edges of the shells, plates, bases, keycaps and radar pods are chamfered, so leave elephant-foot compensation at the preset.
 
 ### Keycap settings (smooth dish)
 
@@ -186,7 +250,7 @@ A full HK-4 (coupon excluded) is about 1 h 20 min and 33 g. Use 3 walls and 15% 
 
 ### Fit coupon first
 
-- **Switch holes (14.0 / 14.1 / 14.2):** pick the one where a switch clicks in firmly without wobbling. Set `SWITCH_HOLE` in `remote.py` (now 14.0 + `fit("snug", "linear")`).
+- **Switch holes (14.0 / 14.1 / 14.2):** pick the one where a switch clicks in firmly without wobbling. Set `SWITCH_HOLE` in `remote.py`. Result on this A1 (2026-10-17): 14.0 fits firmly, so `SWITCH_HOLE = 14.0`. The next coupon prints 13.9 / 14.0 / 14.1.
 - **Stem sockets (labelled 10–30 = slop 0.10–0.30 mm):** push a switch stem into each. Pick the snuggest one that still goes on fully without forcing, and set `STEM_SLOP` in `keycap.py`.
 
 ## Assembly (remote)
@@ -194,8 +258,14 @@ A full HK-4 (coupon excluded) is about 1 h 20 min and 33 g. Use 3 walls and 15% 
 1. **Measure, then re-export if anything differs.** You'll need your battery, antenna and BH1750 board (chip position: `BH_CHIP_DX`, tallest part: `BH_TALL`). Run `model.py` and `test_fit.py`.
 2. Press the 4 heat-set inserts into the corner bosses (iron at about 220 °C).
 3. Push each micro LED up into its light tube from inside, so it shines through the dot. Fix it with a drop of glue, and run its leads along the deck.
-4. Clip the 4 switches into the plate, outside the shell, and wire them (see *Wiring*). Feed the wires down through the well and drop the plate in. It rests on the 45° ledge. If it lifts when you pull a keycap, put a drop of CA glue at each end.
-5. Hang the BH1750 between its rails, chip up, under the light window. Stick the antenna to the inside of the front wall (bar) or right wall (square), and plug it into the XIAO's U.FL socket.
+4. Clip the 4 switches into the plate, outside the shell, and wire them (see *Wiring*).
+   - Turn each switch so its two clips face the plate edges **without** slots: front and back
+     on the HK-22, left and right on the HK-4. The slotted edges are the snap beams.
+   - Feed the wires down through the well. Push the plate straight down until both sides
+     click. It rests on the 45° ledge and the barbs hold it down.
+   - To take it out, open the base. From inside, press each barb inwards through the pocket
+     under the well wall, and push the plate up.
+5. Push the BH1750, chip up, straight up into its cradle under the light window until both lips click under it. The wires leave from the short end. Stick the antenna to the inside of the front wall (bar) or right wall (square), and plug it into the XIAO's U.FL socket.
 6. In the base:
    - Stick the battery in its bay with foam tape, leads towards the XIAO.
    - Push the XIAO back in its cradle until its USB-C sits in the port, 0.3 mm short of the outside, and fix it with a dab of hot glue.
@@ -225,10 +295,13 @@ All of these are parameters at the top of `remote.py` (or `style.py` for the sha
 - `WELL_DEPTH`, `WELL_GAP`: how deep the keys sit and the gap round them. The body height follows.
 - `SWITCH_HOLE`, `PLATE_CLEAR`: switch fit, plate fit.
 - `BATT_*`, `BOARD_*`, `BH_*`, `BUZ_*`, `ANT_*`: bought-part sizes. `test_fit.py` re-checks them.
+- `SNAP_BARB`: how far the plate's barbs reach. If the plate is hard to push in, lower it by 0.1. If it still lifts, raise it by 0.1.
+- `BH_LIP`, `BH_ROOM`: the light-sensor cradle. If the board won't go up far enough to click, its tallest part is taller than 1.2 mm: raise `BH_ROOM`.
 - `R_CORNER`, `TOP_CHAMFER`, `SEAM_CHAMFER`, `BASE` (stripe thickness) in `style.py`.
 
 ## Print log
 
 | Date | Version | Result | Change for next |
 |------|---------|--------|-----------------|
-| | v0.7 | not printed yet | |
+| 2026-10-17 | v0.7 (HK-22) | Printed. Poor surface quality, with small gaps here and there. The plate had nothing holding it in the shell, and nothing held the light sensor | v0.8: plate snaps, sensor cradle, 1.6 mm plate, 14.0 mm switch holes (coupon), sliced files with Arachne walls and a slow first layer |
+| | v0.8 | not printed yet | |

@@ -5,7 +5,8 @@ Run: uv run projects/ha-macropad/test_fit.py [hk4 hk22 hub ld2410c ld2450]   (de
   - no printed part overlaps another, and no bought part (switches with their wiring room,
     XIAO, LiPo, BH1750, buzzer, LEDs, antenna, radar boards) overlaps anything
   - keycaps clear the switch housing and the well, at rest and fully pressed
-  - the plate rests on the well's ledge, below the deck
+  - the plate rests on the well's ledge, below the deck, and its snap beams hold it down
+  - the light sensor sits in its snap cradle: it can't drop out or push into the deck
   - each USB-C plug can reach full insertion through the wall in front of its receptacle
   - the hub's snap clips stay under ~1.5 % bending strain
 """
@@ -18,7 +19,9 @@ sys.path.insert(0, str(Path(__file__).parent))
 import hub  # noqa: E402
 import radar  # noqa: E402
 import remote  # noqa: E402
-from style import USB_SKIN  # noqa: E402
+from build123d import Pos  # noqa: E402
+
+from style import USB_SKIN, interference  # noqa: E402
 
 PLUG_SHELL = 6.65          # USB-C plug: metal shell in front of the moulded grip (USB-IF spec)
 PLUG_MATED = 6.2           # shell depth into the receptacle when fully seated (USB-IF spec)
@@ -49,6 +52,28 @@ def test_remote(kind: str, failures: list) -> None:
           f"top {remote.WELL_DEPTH + remote.PLATE_CLEAR:.2f} mm below the deck", failures)
     for name, shape in (("shell", a.shell), ("plate", a.plate), ("base", a.base), ("keycap", a.cap)):
         check(shape.is_valid and len(shape.solids()) == 1, f"{name} is one valid solid", failures)
+
+    # Plate snaps: the barb must reach past the wall, the beam must have room to bend away,
+    # the web left between slot and switch hole must print as 2 lines, and a lifted plate
+    # must hit the catch.
+    reach = remote.SNAP_BARB - remote.PLATE_CLEAR
+    web = (remote.WELL_GAP + (remote.CAP - remote.SWITCH_HOLE) / 2 - remote.PLATE_CLEAR
+           - remote.SNAP_BEAM - remote.SNAP_SLOT)
+    check(0.3 <= reach < remote.SNAP_SLOT - 0.2 and web >= 0.84,
+          f"plate snap: barb {reach:.2f} mm past the wall, slot {remote.SNAP_SLOT} mm, web to the switch hole "
+          f"{web:.2f} mm", failures)
+    strain = remote.plate_snap_strain()
+    check(strain <= 0.016, f"plate snap beam strain {strain * 100:.2f} % (PLA: keep under ~1.6 %)", failures)
+    lifted = interference({"shell": a.shell, "plate": Pos(0, 0, 0.2) * a.plate}, {})
+    check(bool(lifted), "plate lifted 0.2 mm hits the snap catches", failures)
+
+    # BH1750 cradle: the board can't fall out or push up into the deck
+    board = remote.bought_parts(L)["bh1750"]
+    strain = remote.bh_strain(L)
+    check(strain <= 0.016, f"light sensor cradle beam strain {strain * 100:.2f} %", failures)
+    held = (interference({"shell": a.shell}, {"bh1750": Pos(0, 0, -0.2) * board})
+            and interference({"shell": a.shell}, {"bh1750": Pos(0, 0, 0.2) * board}))
+    check(bool(held), "light sensor held: 0.2 mm down hits the lips, 0.2 mm up hits the corner tabs", failures)
     check(PLUG_SHELL - USB_SKIN >= PLUG_MATED,
           f"USB-C: receptacle {USB_SKIN} mm inside the port, plug seats {PLUG_SHELL - USB_SKIN:.2f} mm "
           f"(needs {PLUG_MATED})", failures)

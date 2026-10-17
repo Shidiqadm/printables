@@ -5,9 +5,11 @@
 
 Printed parts (per layout):
   shell   unibody: deck with the key well, light window and micro-LED dots; walls with the
-          speaker grille and the USB-C port; insert bosses. Prints deck-down, no supports.
-  plate   1.5 mm switch plate. Drops into the well and rests on its 45 degree ledge, so key
-          presses push it onto the shell. Prints top-down.
+          speaker grille and the USB-C port; insert bosses; the light sensor's snap cradle.
+          Prints deck-down, no supports.
+  plate   1.6 mm switch plate. Drops into the well and rests on its 45 degree ledge, so key
+          presses push it onto the shell; two snap beams click it in, so it can't lift when a
+          keycap is pulled. Prints top-down.
   base    accent base plate with the XIAO cradle, battery bay, buzzer seat and the name
           engraved underneath. Prints flat.
   keycap  keycap.py (print 4: 3 + 1 accent)
@@ -23,7 +25,10 @@ front-left-bottom corner of the base.
 from math import ceil, sqrt
 from types import SimpleNamespace
 
-from build123d import Align, Box, Compound, Cone, Cylinder, Pos, RectangleRounded, Rot, chamfer, extrude, loft
+from build123d import (
+    Align, Box, Compound, Cone, Cylinder, Location, Plane, Polygon, Pos, RectangleRounded, Rot,
+    SlotCenterToCenter, chamfer, extrude, loft,
+)
 
 from keycap import CAP, CAP_R, make_keycap
 from printlib import A1, fit
@@ -42,13 +47,26 @@ MODULE_SPAN = 12.85        # width of the sensor strip (grille, light window, ch
 WELL_DEPTH = 3.0           # deck top -> plate top
 WELL_GAP = 0.8             # keycap edge -> well wall
 WELL_EDGE = 0.6            # 45 degree bevel round the well opening
-PLATE = 1.5                # MX clips need 1.5 +- 0.1
+PLATE = A1.layers(8)       # 1.6: MX clips take 1.5 +- 0.1 (1.6 = FR4 plates); 1.5 sliced to 1.4
 PLATE_CLEAR = fit("slip", "linear") / 2      # per side, plate in the well
 LEDGE = 1.0                # 45 degree ledge the plate rests on (and the plate's bottom bevel)
 LEDGE_BELOW = 1.0          # collar continues this far below the ledge
 COLLAR = A1.wall(3)        # wall of the collar that carries the ledge
 PLATE_TOP_EDGE = 0.3       # plate's bed-side edge
-SWITCH_HOLE = 14.0 + fit("snug", "linear")   # 14.0 nominal; tune with the fit coupon
+SWITCH_HOLE = 14.0         # fit coupon (2026-10-17): 14.0 holds firmly; 14.1 was loose
+
+# Plate snaps. On two opposite edges a slot cuts a beam free from the plate; the beam carries
+# a barb that clicks into a pocket under the well wall, so the plate can't lift. The beam bends
+# in the plate's own plane (along the printed lines), and the barb's catch face prints on the
+# bed. Square: left and right edges; bar: front and back. The switches' clips face the other
+# two edges (README).
+SNAP_BEAM = 1.0            # beam width in the plate's plane
+SNAP_SLOT = 0.8            # slot that frees the beam; it deflects about 0.5 into it
+SNAP_SPAN = 28.0           # slot length between its end centres (free beam ~ SNAP_SPAN + SNAP_SLOT)
+SNAP_BARB = 0.6            # barb reach past the plate edge (0.5 past the well wall)
+SNAP_BARB_L = 6.0          # barb length along the edge
+SNAP_LAND = 0.2            # straight band under the barb's catch face, above its 45 degree lead-in
+SNAP_GAP = 0.15            # pocket clearance round the barb
 
 # MX-style switch (Cherry datasheet): housing 5.0 below the plate top, pins 3.3 below
 # that; top housing 6.6 above the plate; stem 3.6 above that; 4.0 travel.
@@ -75,9 +93,19 @@ BAY_WALL, BAY_WALL_H = 1.0, 2.5
 # BH1750 light sensor (GY-302 module, header removed), chip up, under the light window
 BH_L, BH_W, BH_T = 18.5, 13.9, 1.6
 BH_CHIP, BH_CHIP_H = 3.0, 0.75   # BH1750FVI, WSOF6I package
-BH_TALL = 1.2              # tallest part on the chip side (regulator); the board hangs on it
+BH_TALL = 1.2              # tallest part on the chip side (regulator)
+BH_ROOM = 0.2              # extra room over the tallest part (also puts the cradle on a 0.2 layer line)
 BH_CHIP_DX = 0.0           # chip offset from the board centre along its length
 LIGHT_WIN_D = 3.0
+# BH1750 snap cradle: the board pushes up between two beams that hang from the deck on corner
+# posts. Lips on the beams click under its edges and corner tabs stop it on top. The beams
+# bend sideways and print as bridges between the posts, so they flex along the printed lines.
+BH_BEAM = A1.wall(2)       # 0.84
+BH_LIP = 0.4               # how far each lip reaches under the board
+BH_LIP_L = 8.0             # lip length along the board
+BH_LIP_GAP = 0.05          # lip -> board underside
+BH_POST = A1.wall(3)       # post length past the board's end
+BH_TAB = 0.6               # corner tab over the board (PCB corners are free of parts)
 # Passive buzzer 12 x 8.5 mm ("12085") standing in a seat on the base
 BUZ_D, BUZ_H = 12.0, 8.5
 BUZ_SEAT_WALL, BUZ_SEAT_H = 0.8, 2.5
@@ -113,7 +141,7 @@ def layout(kind: str) -> SimpleNamespace:
 
     sw_stack = SW_BELOW + SW_PINS + WIRE_ROOM  # plate top -> lowest switch wiring
     stacks = [BASE + BATT_T + 0.3 + sw_stack + WELL_DEPTH,                       # battery under keys
-              BASE + BUZ_H + 0.5 + BH_T + BH_TALL + DECK]                        # buzzer under BH1750
+              BASE + BUZ_H + 0.5 + bh_lip_drop() + BH_T + BH_TALL + BH_ROOM + DECK]  # buzzer under BH1750
     if kind == "bar":                                                            # XIAO under keys
         stacks.append(BASE + BOARD_LEDGE + BOARD_T + USB_RECEPT_H + XIAO_GAP + sw_stack + WELL_DEPTH)
     H = BASE + ceil(round((max(stacks) - BASE) / A1.layer_height, 6)) * A1.layer_height
@@ -172,6 +200,8 @@ def layout(kind: str) -> SimpleNamespace:
     # BH1750 board footprint (x, y) and chip offset, long side along x unless rotated
     p.bh_size = (BH_W, BH_L) if bh_rot else (BH_L, BH_W)
     p.bh_c = (light[0], light[1] - BH_CHIP_DX) if bh_rot else (light[0] - BH_CHIP_DX, light[1])
+    p.bh_top = H - DECK - BH_TALL - BH_ROOM  # board's chip side
+    p.bh_bot = p.bh_top - BH_T
     return p
 
 
@@ -183,6 +213,101 @@ def hex_grille(cu, cv):
             if abs(i + j) <= 2:
                 pts.append((cu + (i + j / 2) * GRILLE_PITCH, cv + j * GRILLE_PITCH * sqrt(3) / 2))
     return pts
+
+
+# ---- Snap fits ---------------------------------------------------------------
+# Each snap is modelled once in a local frame (u = outwards, v = along the edge, z = up) and
+# placed on both sides by these frames.
+def snap_frames(L):
+    """Frames on the two well edges that carry the plate snaps, origin on the well wall."""
+    w = L.well
+    if L.kind == "square":  # left and right edges, beside the key columns
+        return [Location((w.x0 + w.w, w.cy, 0)), Location((w.x0, w.cy, 0), (0, 0, 180))]
+    return [Location((w.cx, w.y0 + w.d, 0), (0, 0, 90)), Location((w.cx, w.y0, 0), (0, 0, -90))]
+
+
+def bh_frames(L):
+    """Frames on the BH1750's two long edges, origin on the board edge."""
+    (bx, by), (sx, sy) = L.bh_c, L.bh_size
+    if L.bh_rot:  # long side along y
+        return [Location((bx + sx / 2, by, 0)), Location((bx - sx / 2, by, 0), (0, 0, 180))]
+    return [Location((bx, by + sy / 2, 0), (0, 0, 90)), Location((bx, by - sy / 2, 0), (0, 0, -90))]
+
+
+def profile_bar(pts, length):
+    """A prism along v from a (u, z) outline (points in either winding)."""
+    return extrude(Plane.XZ * Polygon(*pts, align=None), amount=length / 2, both=True)
+
+
+def plate_snap(L):
+    """(material to add, material to cut) for the plate's snap beams, in use position."""
+    w, u0 = L.well, -PLATE_CLEAR  # plate edge
+    fill_l = SNAP_SPAN + SNAP_SLOT + 1.0
+    # The beam gets a square bottom (the plate's 45 degree bevel and the well's ledge are both
+    # cut back along it), so it is a full rectangle that the ledge can't push on.
+    fill = Pos(u0 - SNAP_BEAM / 2, 0, w.seat) * Box(SNAP_BEAM, fill_l, PLATE - PLATE_TOP_EDGE, align=CEN_MIN)
+    zt = L.P  # catch face flush with the plate top: it prints on the bed
+    barb = profile_bar([(u0 - 0.3, zt), (u0 + SNAP_BARB, zt), (u0 + SNAP_BARB, zt - SNAP_LAND),
+                        (u0 - 0.3, zt - SNAP_LAND - SNAP_BARB - 0.3)], SNAP_BARB_L)
+    slot = Pos(u0 - SNAP_BEAM - SNAP_SLOT / 2, 0, w.seat - 0.01) * extrude(
+        Rot(0, 0, 90) * SlotCenterToCenter(SNAP_SPAN, SNAP_SLOT), amount=PLATE + 0.02)
+    frames = snap_frames(L)
+    return Compound([f * (fill + barb) for f in frames]), Compound([f * slot for f in frames])
+
+
+def shell_snap(L):
+    """(material to add, material to cut) in the shell for the plate snaps: a pocket under the
+    well wall for each barb (open at the bottom, so it needs no support), a pad behind it so
+    the collar stays COLLAR thick, and the ledge cut back along the beam."""
+    w = L.well
+    deep = SNAP_BARB - PLATE_CLEAR + SNAP_GAP  # pocket depth past the well wall
+    pocket_l = SNAP_BARB_L + 2 * SNAP_GAP
+    pad = Pos(COLLAR + deep / 2 - 0.005, 0, w.bottom) * Box(deep + 0.01, pocket_l + 2 * COLLAR,
+                                                            L.H - DECK - w.bottom + 0.01, align=CEN_MIN)
+    pocket = Pos((deep - LEDGE) / 2, 0, w.bottom - 0.01) * Box(deep + LEDGE + 0.01, pocket_l, L.P - w.bottom + 0.01,
+                                                               align=CEN_MIN)
+    ledge = Pos(-(LEDGE + 0.01) / 2, 0, w.bottom - 0.01) * Box(LEDGE + 0.01, SNAP_SPAN + SNAP_SLOT + 1.6,
+                                                      w.seat + LEDGE - w.bottom + 0.02, align=CEN_MIN)
+    frames = snap_frames(L)
+    return Compound([f * pad for f in frames]), Compound([f * (pocket + ledge) for f in frames])
+
+
+def plate_snap_strain():
+    """Peak bending strain of a plate beam as its barb passes the well wall (fixed-fixed beam,
+    centre load)."""
+    span = SNAP_SPAN + SNAP_SLOT
+    return 12 * (SNAP_BARB - PLATE_CLEAR) * SNAP_BEAM / span ** 2
+
+
+def bh_lip_drop():
+    """How far the cradle reaches below the board."""
+    return BH_LIP_GAP + BH_LIP + POCKET_CLEAR / 2
+
+
+def bh_cradle(L):
+    """The BH1750's snap cradle, hanging from the deck."""
+    (sx, sy), c = L.bh_size, POCKET_CLEAR / 2
+    hl = max(sx, sy) / 2  # half the board's length
+    deck_under = L.H - DECK
+    z_lip = L.bh_bot - BH_LIP_GAP  # lip top
+    z0 = L.bh_bot - bh_lip_drop()
+    beam = Pos(c + BH_BEAM / 2, 0, z0) * Box(BH_BEAM, 2 * (hl + c) + 0.02, L.bh_top - z0, align=CEN_MIN)
+    lip = profile_bar([(c + BH_BEAM / 2, z_lip), (-BH_LIP, z_lip), (c, z0), (c + BH_BEAM / 2, z0)], BH_LIP_L)
+    side = beam + lip
+    post_u = (c + BH_BEAM + BH_TAB) / 2 - BH_TAB  # posts reach BH_TAB in past the board edge
+    for s in (-1, 1):
+        post = Pos(post_u, s * (hl + c + BH_POST / 2), z0) * Box(c + BH_BEAM + BH_TAB, BH_POST,
+                                                                  deck_under - z0 + 0.01, align=CEN_MIN)
+        tab = Pos(post_u, s * (hl + c - BH_TAB / 2), L.bh_top) * Box(c + BH_BEAM + BH_TAB, BH_TAB + 2 * c,
+                                                                      deck_under - L.bh_top + 0.01, align=CEN_MIN)
+        side += post + tab
+    return Compound([f * side for f in bh_frames(L)])
+
+
+def bh_strain(L):
+    """Peak bending strain of a cradle beam as the board pushes its lip out (fixed-fixed, centre load)."""
+    span = max(L.bh_size) + POCKET_CLEAR
+    return 12 * (BH_LIP + POCKET_CLEAR / 2) * BH_BEAM / span ** 2
 
 
 def wall_grille(L):
@@ -224,24 +349,17 @@ def make_shell(L):
                                                              align=CEN_MIN)
         body += tube - Pos(x, y, deck_under - LED_TUBE_L - 0.01) * Cylinder(LED_BORE / 2, LED_TUBE_L + 0.02,
                                                                             align=CEN_MIN)
-    # BH1750 rails along its long sides: the board hangs between them on its tallest part,
-    # chip under the window
-    rail_h = BH_TALL + BH_T
-    (bx, by), (sx, sy) = L.bh_c, L.bh_size
-    for sgn in (-1, 1):
-        if L.bh_rot:
-            rail = Pos(bx + sgn * ((sx + POCKET_CLEAR) / 2 + 0.5), by, deck_under - rail_h) * Box(1.0, sy, rail_h + 0.01,
-                                                                                                  align=CEN_MIN)
-        else:
-            rail = Pos(bx, by + sgn * ((sy + POCKET_CLEAR) / 2 + 0.5), deck_under - rail_h) * Box(sx, 1.0, rail_h + 0.01,
-                                                                                                  align=CEN_MIN)
-        body += rail
+    # BH1750 snap cradle (chip under the window) and the pads behind the plate snap pockets
+    body += bh_cradle(L)
+    snap_add, snap_cut = shell_snap(L)
+    body += snap_add
 
     # Key well: straight walls, 45 degree ledge, bevelled opening
     body -= well_outline(L, 0, w.seat + LEDGE, H + 1)
     body -= rounded_rect_loft(w.cx, w.cy, w.seat, w.w - 2 * LEDGE, w.d - 2 * LEDGE, w.r - LEDGE,
                               w.seat + LEDGE + 0.001, w.w, w.d, w.r)
     body -= well_outline(L, -LEDGE, w.bottom - 0.01, w.seat + 0.01)
+    body -= snap_cut
     body -= rounded_rect_loft(w.cx, w.cy, H - WELL_EDGE, w.w, w.d, w.r,
                               H + 0.01, w.w + 2 * WELL_EDGE + 0.02, w.d + 2 * WELL_EDGE + 0.02, w.r + WELL_EDGE)
 
@@ -260,6 +378,8 @@ def make_plate(L):
     plate = Pos(w.cx, w.cy, w.seat) * extrude(RectangleRounded(pw, pd, pr), amount=PLATE)
     plate = chamfer(plate.edges().group_by()[0], length=LEDGE)
     plate = chamfer(plate.edges().group_by()[-1], length=PLATE_TOP_EDGE)
+    snap_add, snap_cut = plate_snap(L)
+    plate = plate + snap_add - snap_cut
     for x, y in L.keys:
         hole = Pos(x, y, w.seat - 0.01) * Box(SWITCH_HOLE, SWITCH_HOLE, PLATE + 0.02, align=CEN_MIN)
         edge = loft([Pos(x, y, L.P - PLATE_TOP_EDGE) * RectangleRounded(SWITCH_HOLE, SWITCH_HOLE, 0.01),
@@ -366,8 +486,10 @@ def bought_parts(L):
                      + usb_receptacle(L.board_xc, L.usb_z, y1 + USB_OVERHANG))
     parts["lipo"] = Pos(*L.bay_c, BASE) * Box(BATT_L, BATT_W, BATT_T, align=CEN_MIN)
     deck_under = L.H - DECK
-    parts["bh1750"] = (Pos(*L.bh_c, deck_under - BH_TALL - BH_T) * Box(*L.bh_size, BH_T, align=CEN_MIN)
-                       + Pos(*L.light, deck_under - BH_CHIP_H) * Box(BH_CHIP, BH_CHIP, BH_CHIP_H, align=CEN_MIN))
+    parts["bh1750"] = (Pos(*L.bh_c, L.bh_bot) * Box(*L.bh_size, BH_T, align=CEN_MIN)
+                       + Pos(*L.light, L.bh_top) * Box(BH_CHIP, BH_CHIP, BH_CHIP_H, align=CEN_MIN)
+                       + Pos(*L.bh_c, L.bh_top) * Box(L.bh_size[0] - 2 * BH_TAB - 0.2, L.bh_size[1] - 2 * BH_TAB - 0.2,
+                                                       BH_TALL, align=CEN_MIN))  # parts on the chip side
     parts["buzzer"] = Pos(*L.buz, BASE) * Cylinder(BUZ_D / 2, BUZ_H, align=CEN_MIN)
     for i, (x, y) in enumerate(L.dots + [L.charge]):
         n = f"led {i + 1}" if i < len(L.dots) else "charge led"
@@ -400,8 +522,10 @@ def fit_check(a: SimpleNamespace) -> list[str]:
 def print_poses(a: SimpleNamespace) -> dict:
     """Every printed part moved to its print orientation, on the bed at z = 0."""
     L = a.L
-    flip = Pos(0, L.D, L.H) * Rot(180, 0, 0)        # deck on the bed
-    plate_flip = Pos(0, L.D, L.P) * Rot(180, 0, 0)  # plate top on the bed
+    # Turned over left-to-right (about y), so the back stays at the back of the bed and a
+    # "Back" seam lands on the USB-C wall, not the front.
+    flip = Pos(L.W, 0, L.H) * Rot(0, 180, 0)        # deck on the bed
+    plate_flip = Pos(L.W, 0, L.P) * Rot(0, 180, 0)  # plate top on the bed
     return {
         "shell": flip * a.shell,
         "shell-ams": {"shell": flip * a.shell, "dots": flip * a.dots},
