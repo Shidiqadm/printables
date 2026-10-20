@@ -55,6 +55,10 @@ def test_remote(kind: str, failures: list) -> None:
     check(floor >= 0.8 and not (under and under.solids()),
           f"battery pocket {remote.BATT_POCKET} mm deep, {floor:.1f} mm floor under it, clear of the engraved name",
           failures)
+    lb = a.label.bounding_box()
+    margin = min(lb.min.X, lb.min.Y, L.W - lb.max.X, L.D - lb.max.Y)
+    check(margin >= 5.0, f"engraved name {margin:.1f} mm in from the base's edge (at x {(lb.min.X + lb.max.X) / 2:.1f}"
+          f" of {L.W:.1f})", failures)
     hidden = L.H - (L.P + remote.SW_ABOVE)
     check(hidden >= 0, f"switch housings {hidden:.1f} mm below the deck: hidden in the well", failures)
     # The plate's bevel is modelled PLATE_CLEAR inside the ledge; it settles that far down

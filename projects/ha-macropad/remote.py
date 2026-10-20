@@ -90,9 +90,10 @@ CRADLE_SLACK = 0.5         # extra cradle length: push the board back until its 
 XIAO_GAP = 0.14            # receptacle top -> lowest switch wiring (bar: XIAO under keys 3-4)
 BOARD_LEDGE = 1.0          # room for the BAT+/BAT- solder joints underneath
 BOARD_PARTS_H = 2.6
-# 1S LiPo JYZ-602040 (450 mAh): 6.0 x 20 x 40 + tape and swelling allowance. It sits
-# BATT_POCKET deep in a pocket in the base, which keeps a 4-layer floor under it.
-BATT_T, BATT_W, BATT_L = 6.3, 20.0, 40.0
+# 1S LiPo JYZ-602040 (450 mAh). The name says 6.0 thick, but the user's cell measures
+# 5 x 20 x 40 with a ruler (2026-10-20): 0.5 is added for the ruler and for tape and swelling.
+# It sits BATT_POCKET deep in a pocket in the base, which keeps a 4-layer floor under it.
+BATT_T, BATT_W, BATT_L = 5.5, 20.0, 40.0
 BATT_POCKET = 1.2
 BAY_WALL, BAY_WALL_H = 1.0, 2.5
 # BH1750 light sensor (GY-302 module, header removed), chip up, under the light window
@@ -218,9 +219,7 @@ def layout(kind: str) -> SimpleNamespace:
     p.bh_c = (light[0], light[1] - BH_CHIP_DX) if bh_rot else (light[0] - BH_CHIP_DX, light[1])
     p.bh_top = H - DECK - BH_TALL - BH_ROOM  # board's chip side
     p.bh_bot = p.bh_top - BH_T
-    # Name under the base: centred, or moved just clear of the battery pocket (bar)
-    half = label_sketch(name).bounding_box().size.X / 2
-    p.label_c = (max(W / 2, bay_c[0] + bay_pl / 2 + BAY_WALL + half), D / 2)
+    p.label_c = label_place(name, W, D, bay_c, bay_pl, bay_pw)
     p.adxl = kind == "square"
     if p.adxl:
         # Left end against the left wall's cradle posts, front edge behind the well's collar.
@@ -232,6 +231,20 @@ def layout(kind: str) -> SimpleNamespace:
         p.adxl_top = round(H - A1.layer_height * int(gap / A1.layer_height + 1e-6), 2)
         p.adxl_bot = p.adxl_top - ADXL_T
     return p
+
+
+def label_place(name, W, D, bay_c, bay_pl, bay_pw):
+    """Where the name goes under the base: centred, unless that runs into the battery pocket
+    (bar). Then it is centred in the wider free stretch beside the pocket instead."""
+    size = label_sketch(name).bounding_box().size
+    hw, hh = size.X / 2, size.Y / 2
+    px0, px1 = bay_c[0] - bay_pl / 2 - BAY_WALL, bay_c[0] + bay_pl / 2 + BAY_WALL
+    py0, py1 = bay_c[1] - bay_pw / 2 - BAY_WALL, bay_c[1] + bay_pw / 2 + BAY_WALL
+    if D / 2 + hh <= py0 or D / 2 - hh >= py1 or W / 2 + hw <= px0 or W / 2 - hw >= px1:
+        return W / 2, D / 2
+    left, right = (0.0, px0), (px1, W)
+    span = left if left[1] - left[0] > right[1] - right[0] else right
+    return (span[0] + span[1]) / 2, D / 2
 
 
 def w_collar(well):

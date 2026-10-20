@@ -148,7 +148,9 @@ def label_sketch(name):
 def label(name, x, y, extra=0.0):
     """The name as a solid from z = -extra to LABEL_DEPTH, centred on (x, y).
     extra > 0 for the engraving cut; extra = 0 for the flush AMS inlay."""
-    return Pos(x, y, -extra) * extrude(label_sketch(name), amount=LABEL_DEPTH + extra)
+    sketch = label_sketch(name)
+    c = sketch.bounding_box().center()  # the font's own origin is a little off the letters' middle
+    return Pos(x - c.X, y - c.Y, -extra) * extrude(sketch, amount=LABEL_DEPTH + extra)
 
 
 def label_stroke_ok(name):

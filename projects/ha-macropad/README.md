@@ -15,7 +15,7 @@ There are two layouts, plus two gateways in the same design language:
 | Part | Size (mm) | What |
 |------|-----------|------|
 | **HK-4** bar | 112 × 34 × 21.4 (+ keys) | Desk bar. One row of keys with a status column on the right. Key 4 (right) is orange. |
-| **HK-22** square | 53 × 74 × 21.2 (+ keys) | Handheld. 2 × 2 keys with a status row at the back. Key 4 (front right) is orange. An ADXL345 senses pick-up, shake and flip. |
+| **HK-22** square | 53 × 74 × 20.4 (+ keys) | Handheld. 2 × 2 keys with a status row at the back. Key 4 (front right) is orange. An ADXL345 senses pick-up, shake and flip. |
 | **Hub** | 38 × 32 × 12 | ESP-NOW gateway: an ESP32-C3 SuperMini on USB power. The board's blue LED shows through a single dot. Snap-fit, no screws. |
 | **LD2410C pod** | 26.4 × 28 × 12.4 | Corner presence sensor that is also the gateway. HLK-LD2410C + SuperMini sandwich behind a 0.8 mm radar window, on an orange corner bracket. |
 | **LD2450 pod** | 48.7 × 28 × 13.6 | The same idea for the HLK-LD2450 tracking radar. |
@@ -72,7 +72,7 @@ Output (`output/<part>/`, rebuilt by `model.py`; every part is already in print 
 | USB-C receptacle face | 0.3 mm inside the port | USB-IF Type-C spec: the plug shell is 6.65 mm and seats fully at 6.2 mm, so the receptacle face may sit at most 0.45 mm in |
 | ESP32-C3 SuperMini PCB | 22.52 × 18.0 mm | vendor drawing |
 | SuperMini USB-C past the PCB edge | 1.0 mm | **guess: measure yours** (`SM_USB_OVERHANG` in `hub.py` and `radar.py`) |
-| LiPo JYZ-602040 | 6.3 × 20 × 40 mm modelled (bay 20.2 × 40.2), 1.2 mm deep in a pocket in the base | the name gives 6.0 × 20 × 40; 0.3 for tape and swelling. **Measure yours** (`BATT_*` in `remote.py`) |
+| LiPo JYZ-602040 | 5.5 × 20 × 40 mm modelled (bay 20.2 × 40.2), 1.2 mm deep in a pocket in the base | the user's cell, measured with a ruler (2026-10-20): 5 × 20 × 40 (the name says 6.0 thick). 0.5 added for the ruler, tape and swelling |
 | BH1750 module (GY-302) | 18.5 × 13.9 × 1.6 mm; chip 3.0 × 1.6 × 0.75 | seller listing; BH1750FVI datasheet. Chip offset and regulator height are not published |
 | Light-sensor cradle | 0.84 mm beams, 0.4 mm lips, 1.4 mm room over the board (1.2 mm tallest part + 0.2) | design: 1.44 % bending strain when the board clicks in |
 | Buzzer 12085 | Ø12 × 8.5 mm, pins 6.5 mm apart | CEM-1203(42) datasheet |
@@ -84,7 +84,7 @@ Output (`output/<part>/`, rebuilt by `model.py`; every part is already in print 
 | HLK-LD2410C / LD2450 | 22 × 16 / 44 × 15 mm | Hi-Link manuals |
 | Radar window | 0.8 mm solid PLA | Hi-Link radome guidance: ≤ 1/8 λ thin, or half-wave thick |
 
-**Antenna:** Seeed's current antenna for the XIAO ESP32-C3 (drawing dated 2024-10-08) is a 40 × 20 mm FPC. It is too wide to stand inside the 21 mm-tall body. The model reserves space for a slim 2.4 GHz FPC antenna with a U.FL (IPEX) plug, about 40 × 7.5 mm, stuck to the inside of the front wall (bar) or the right wall (square). Older XIAO antennas, or a slim one from Robu or Amazon.in, fit there. Measure yours; if it differs, change `ANT_L` / `ANT_W` in `remote.py` and run `test_fit.py`.
+**Antenna:** Seeed's current antenna for the XIAO ESP32-C3 (drawing dated 2024-10-08) is a 40 × 20 mm FPC. It is too wide to stand inside the 20 mm-tall body. The model reserves space for a slim 2.4 GHz FPC antenna with a U.FL (IPEX) plug, about 40 × 7.5 mm, stuck to the inside of the front wall (bar) or the right wall (square). Older XIAO antennas, or a slim one from Robu or Amazon.in, fit there. Measure yours; if it differs, change `ANT_L` / `ANT_W` in `remote.py` and run `test_fit.py`.
 
 **Tolerances:** `tolerances.toml` still holds the uncalibrated defaults. Print `calibration/tolerance_coupon` and this project's `fit-coupon` before the full set.
 
@@ -95,10 +95,10 @@ Output (`output/<part>/`, rebuilt by `model.py`; every part is already in print 
   - The cap still goes on either way round: both arms are 4.0 mm long, so all four ribs squeeze the same.
   - The stem test now varies the squeeze: 00, 05, 10, 15, 20 (hundredths of a millimetre per end). **Test it by pulling, not pushing:** push a post onto a switch, then pull. Pick the smallest number that needs a firm tug to come off but still goes on with your thumb, and set `RIB_GRIP` in `keycap.py`. In the slice, 00 and 05 come out almost without ribs (too small to print), and 10 to 20 come out close to their values.
   - Print the caps from `print_plan.py`'s files, not your own slice. The fit depends on Arachne walls and 210 °C.
-- **The keys sit deeper.** The clear switch housings stood 3.6 mm above the deck. The plate is now 6.8 mm below the deck instead of 3.0, so the housings hide and the caps' skirts sit just below the deck. The body is only 0.8 mm taller (21.2 mm; HK-4 21.4), and the top of the caps is lower than before:
-  - The battery is now a JYZ-602040 (6 × 20 × 40 mm, 450 mAh). It sits 1.2 mm deep in a pocket in the base, over a 0.8 mm floor.
+- **The keys sit deeper.** The clear switch housings stood 3.6 mm above the deck. The plate is now 6.8 mm below the deck instead of 3.0, so the housings hide and the caps' skirts sit just below the deck. The HK-22 body stays 20.4 mm (the HK-4 grows to 21.4: its XIAO sits under the keys), and the tops of the caps are 3.6 mm lower than before:
+  - The battery is now a JYZ-602040 (measured 5 × 20 × 40 mm, 450 mAh). It sits 1.2 mm deep in a pocket in the base, over a 0.8 mm floor.
   - Cut the switch pins and the plastic centre post to 1.5 mm after soldering, and run the wires in the gaps between the switches (see *Wiring*).
-  - On the HK-4 the engraved name moves right, clear of the battery pocket.
+  - The engraved name stays centred under the HK-22. On the HK-4 it would cross the battery pocket, so it is centred in the free stretch to the right of the pocket instead. Names are now centred on their letters, not on the font's origin.
 - **ADXL345 accelerometer (HK-22).** It senses pick-up, shake and face-down flip, and Home Assistant gets them as `esphome.hk_motion` events (see the firmware README).
   - The GY-291 board lies flat, chip up, in the status row: over the buzzer and the XIAO, under the light sensor. It clicks into a snap cradle like the light sensor's.
   - It shares the I2C bus with the BH1750. Its interrupt goes to D3 (key 3) through a diode.
@@ -166,7 +166,7 @@ Bought in India; prices are rough, in INR.
 | 1 | slim 2.4 GHz FPC antenna, U.FL / IPEX (≈ 40 × 7.5 mm) | if yours is the 40 × 20 mm one (see above) | 50–100 |
 | 5 | micro LEDs: pre-wired 0603 SMD, or 1.8 mm through-hole, warm white | 4 key dots + charging dot. The pre-wired "model railway" ones often have a 12 V resistor on the lead: cut it off | 150–300 |
 | 5 | resistors: 4 × 470 Ω (white LEDs; 1 kΩ for red or green), 1 × 1 kΩ | LED current, 1–3 mA | 5 |
-| 1 | LiPo JYZ-602040, 450 mAh, with protection PCB | measure it: the bay is 20.2 × 40.2 mm, 6.3 mm of height allowed. The XIAO charges at 380 mA, so pick a cell rated for 1C | 150–250 |
+| 1 | LiPo JYZ-602040, 450 mAh, with protection PCB | already have (measured 5 × 20 × 40 mm). The bay is 20.2 × 40.2 mm with 5.5 mm of height. The XIAO charges at 380 mA, so the cell should be rated for 1C | — |
 | 4 | MX-style switches, e.g. Outemu (Cosmic Byte 20-pack) | 3- or 5-pin. Blue = clicky, brown = tactile, red = linear | ≈ 145 / 20 |
 | 1 | passive buzzer 12 × 8.5 mm ("12085") | a magnetic type needs an S8050 NPN + 1 kΩ | 10–20 |
 | 1 | BH1750 light sensor (GY-302), header removed | already have | — |
@@ -239,9 +239,9 @@ as they are:
 | File | Process | Time | PLA |
 |------|---------|------|-----|
 | `coupon/stem-test.gcode.3mf` (`print_plan.py coupon`) | **print this first**: the keycap grip test (see *Fit coupon first*) | 11 min | 2.5 g |
-| `hk22-all-parts.gcode.3mf` (`print_plan.py hk22 all`) | **every part on one plate**: shell, plate, base, 4 keycaps | 1 h 36 min | 32.6 g |
+| `hk22-all-parts.gcode.3mf` (`print_plan.py hk22 all`) | **every part on one plate**: shell, plate, base, 4 keycaps | 1 h 35 min | 32.1 g |
 | `0_test_plate_keycap.gcode.3mf` (`print_plan.py hk22 test`) | the plate + 1 keycap, to test before the full set | 10 min | 2.5 g |
-| `1_shell.gcode.3mf` | the shell | 55 min | 18.4 g |
+| `1_shell.gcode.3mf` | the shell | 54 min | 17.9 g |
 | `2_plate_base.gcode.3mf` | the plate and the plain base | 22 min | 9.6 g |
 | `3_keycaps.gcode.3mf` (× 4) | the keycaps. Set one cap to the orange filament | 19 min | 4.8 g |
 
