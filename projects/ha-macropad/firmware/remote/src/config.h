@@ -18,8 +18,8 @@
 #define PIN_KEY_B 3    // D1: key 2, and key 4 through a diode
 #define PIN_KEY_C 5    // D3: key 3, and the ADXL345's INT1 through a diode
 #define PIN_BATT 4     // D2: battery divider, 470k / 470k
-#define PIN_SDA 6      // D4: BH1750 and ADXL345
-#define PIN_SCL 7      // D5: BH1750 and ADXL345
+#define PIN_SDA 6      // D4: ADXL345
+#define PIN_SCL 7      // D5: ADXL345
 #define PIN_BUZZER 10  // D10: passive buzzer
 
 // LED cathode side of each key dot (D6, D7, D8, D9). The pin sinks the current: LOW = on.
@@ -45,12 +45,10 @@ static const uint8_t PIN_DOT[4] = {21, 20, 8, 9};
 
 // ---- Reports -----------------------------------------------------------------
 
-#define REPORT_EVERY_S 300   // timer wake: read light and battery
+#define REPORT_EVERY_S 900   // timer wake: check the battery
 #define HEARTBEAT_S 1800     // report even if nothing changed
 #define OFF_REPORT_S 21600   // while switched off: battery only, every 6 h
 #define STUCK_CHECK_S 60     // while a key is stuck: check this often for its release
-#define LUX_DELTA_MIN 5      // report a light change of at least this many lx...
-#define LUX_DELTA_PCT 15     // ...and at least this many percent
 #define BATT_DELTA_MV 40
 
 // ---- Battery (mV at the cell) ------------------------------------------------
@@ -84,9 +82,8 @@ static const uint8_t PIN_DOT[4] = {21, 20, 8, 9};
 
 // ---- Feedback ----------------------------------------------------------------
 
-#define DOT_MIN 0.04f        // dot brightness in a dark room (0..1)
-#define DOT_MAX 1.00f        // in daylight
-#define DOT_FULL_LUX 300.0f  // room light at which the dots reach DOT_MAX
+// Dot brightness comes from Home Assistant ("Remote dot brightness", sent with every reply).
+#define DOT_DEFAULT_PCT 60   // until the gateway has sent one
 #define BUZZER_ENABLED 1
 #define BUZZER_DUTY 0.5f     // 0.5 is loudest for a piezo; lower is quieter
 

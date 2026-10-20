@@ -15,7 +15,7 @@ enum Type : uint8_t {
   T_REPORT = 2,   // remote -> gateway: light and battery (timer wake)
   T_STATUS = 3,   // remote -> gateway: boot / on / off / shutdown
   T_MOTION = 4,   // remote -> gateway: picked up, shaken or flipped (ADXL345)
-  T_ACK = 0x81,   // gateway -> remote: got it
+  T_ACK = 0x81,   // gateway -> remote: got it, and the dot brightness
   T_DOTS = 0x82,  // gateway -> remote: light these dots (scene state from Home Assistant)
 };
 
@@ -51,17 +51,18 @@ struct Msg {           // remote -> gateway, 13 bytes
   uint8_t key;         // 6    Key (T_PRESS)
   uint8_t value;       // 7    Press (T_PRESS), Status (T_STATUS) or Motion (T_MOTION)
   uint16_t batt_mv;    // 8-9  0 = not measured
-  uint16_t lux;        // 10-11 LUX_UNKNOWN = no reading
+  uint16_t lux;        // 10-11 always LUX_UNKNOWN: the light sensor went in v0.9 (kept for old gateways)
   uint8_t flags;       // 12   Flag bits
 };
 
-struct Ack {           // gateway -> remote, 7 bytes
+struct Ack {           // gateway -> remote, 8 bytes (7 from gateways before v0.9)
   uint8_t magic[2];    // 0-1
   uint8_t version;     // 2
   uint8_t type;        // 3    T_ACK
   uint8_t seq;         // 4    echo of Msg::seq
   uint8_t flags;       // 5    AckFlag bits
   uint8_t channel;     // 6    the gateway's Wi-Fi channel
+  uint8_t dot_level;   // 7    dot brightness 0-100 %, set in Home Assistant
 };
 
 struct Dots {          // gateway -> remote, 7 bytes
@@ -76,7 +77,7 @@ struct Dots {          // gateway -> remote, 7 bytes
 #pragma pack(pop)
 
 static_assert(sizeof(Msg) == 13, "Msg layout");
-static_assert(sizeof(Ack) == 7, "Ack layout");
+static_assert(sizeof(Ack) == 8, "Ack layout");
 static_assert(sizeof(Dots) == 7, "Dots layout");
 
 }  // namespace hk

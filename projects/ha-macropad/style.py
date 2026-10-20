@@ -74,21 +74,21 @@ def rounded_block(w, d, h, r):
     return fillet(Box(w, d, h, align=MIN3).edges().filter_by(Axis.Z), radius=r)
 
 
-def body_block(w, d, h):
+def body_block(w, d, h, r=R_CORNER):
     """The body above the base: rounded block from z = BASE, top chamfer, seam chamfer."""
-    body = Pos(0, 0, BASE) * rounded_block(w, d, h - BASE, R_CORNER)
+    body = Pos(0, 0, BASE) * rounded_block(w, d, h - BASE, r)
     body = chamfer(body.edges().group_by(Axis.Z)[-1], length=TOP_CHAMFER)
     return chamfer(body.edges().group_by(Axis.Z)[0], length=SEAM_CHAMFER)
 
 
-def cavity(w, d, z0, z1, wall=WALL):
-    """The inside of a body: its outline shrunk by `wall`, from z0 to z1."""
-    return Pos(wall, wall, z0) * rounded_block(w - 2 * wall, d - 2 * wall, z1 - z0, R_CORNER - wall)
+def cavity(w, d, z0, z1, wall=WALL, r=R_CORNER):
+    """The inside of a body: its outline shrunk by `wall` (concentric corners), from z0 to z1."""
+    return Pos(wall, wall, z0) * rounded_block(w - 2 * wall, d - 2 * wall, z1 - z0, r - wall)
 
 
-def base_plate(w, d):
+def base_plate(w, d, r=R_CORNER):
     """The accent base plate, z = 0 .. BASE."""
-    lid = rounded_block(w, d, BASE, R_CORNER)
+    lid = rounded_block(w, d, BASE, r)
     lid = chamfer(lid.edges().group_by(Axis.Z)[-1], length=SEAM_CHAMFER)
     return chamfer(lid.edges().group_by(Axis.Z)[0], length=BOTTOM_CHAMFER)
 

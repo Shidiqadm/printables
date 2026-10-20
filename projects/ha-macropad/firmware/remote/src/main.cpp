@@ -3,7 +3,8 @@
 // The chip deep-sleeps until a key wakes it, works out the gesture (single, double, long,
 // a two-key combo, or key 4 held 5 s), sends it over ESP-NOW to the gateway, flashes the
 // key's dot and chirps when the gateway confirms, then sleeps again. A timer wake every
-// REPORT_EVERY_S reads the BH1750 and the battery and reports them when they change.
+// REPORT_EVERY_S checks the battery and reports it when it changes. Every reply from the
+// gateway carries the dot brightness set in Home Assistant (dim at night).
 //
 // With an ADXL345 (HK-22) it also wakes on motion: picked up after lying still, shaken, or
 // turned face down and held still. Its interrupt shares D3 with key 3 through a diode, so it
@@ -13,7 +14,6 @@
 #include <Arduino.h>
 #include <driver/gpio.h>
 #include <esp_sleep.h>
-#include <math.h>
 #include <soc/usb_serial_jtag_struct.h>
 #include <sys/time.h>
 
@@ -92,23 +92,12 @@ bool usb_host_present() {
   return USB_SERIAL_JTAG.fram_num.sof_frame_index != a;
 }
 
-// Dot brightness for the room: DOT_MIN in the dark up to DOT_MAX at DOT_FULL_LUX.
+// Dot brightness from Home Assistant's "Remote dot brightness" (0-100 %), which comes with
+// every reply from the gateway. Squared, so the low end of the slider has the fine steps a
+// dark room needs: 20 % is a soft night glow.
 float dot_scale() {
-  if (!rtc.lux_valid) return (DOT_MIN + DOT_MAX) / 2;
-  const float t = log10f(1.0f + rtc.lux) / log10f(1.0f + DOT_FULL_LUX);
-  return DOT_MIN + (DOT_MAX - DOT_MIN) * constrain(t, 0.0f, 1.0f);
-}
-
-void poll_lux(bool wait) {
-  if (wait)
-    while (sensors::lux_pending() && !sensors::lux_ready(millis())) delay(5);
-  uint16_t lux;
-  if (sensors::lux_ready(millis()) && sensors::lux_read(lux)) {
-    rtc.lux = lux;
-    rtc.lux_valid = true;
-    rtc.lux_read_s = now_s();
-  }
-  fx::set_scale(dot_scale());
+  const float t = (rtc.dot_level <= 100 ? rtc.dot_level : DOT_DEFAULT_PCT) / 100.0f;
+  return t * t;
 }
 
 void idle() {  // one 2 ms step of everything that runs in the background
@@ -134,20 +123,20 @@ hk::Msg make_msg(uint8_t type, uint8_t key = 0, uint8_t value = 0) {
   m.key = key;
   m.value = value;
   m.batt_mv = rtc.batt_mv;
-  m.lux = rtc.lux_valid ? rtc.lux : hk::LUX_UNKNOWN;
+  m.lux = hk::LUX_UNKNOWN;  // no light sensor since v0.9
   m.flags = (rtc.off ? hk::F_OFF : 0) | (battery_low() ? hk::F_BATT_LOW : 0);
   return m;
 }
 
 radio::Result transmit(const hk::Msg &m, bool scan_allowed = true) {
   const radio::Result r = radio::send(m, idle, scan_allowed);
-  // Every message carries light and battery. NO_HA counts too: the hub keeps the values
-  // and Home Assistant gets them when it reconnects.
+  // Every message carries the battery. NO_HA counts too: the hub keeps the value and Home
+  // Assistant gets it when it reconnects.
   if (r != radio::FAIL) {
     rtc.sent_mv = rtc.batt_mv;
-    rtc.sent_lux = rtc.lux;
     rtc.sent_s = now_s();
   }
+  fx::set_scale(dot_scale());  // the reply may have brought a new brightness
   return r;
 }
 
@@ -206,12 +195,6 @@ radio::Result transmit(const hk::Msg &m, bool scan_allowed = true) {
 
 // ---- Wakes -------------------------------------------------------------------
 
-bool lux_changed() {
-  if (!rtc.lux_valid) return false;
-  const int d = abs((int)rtc.lux - (int)rtc.sent_lux);
-  return d >= LUX_DELTA_MIN && d * 100 >= (int)rtc.sent_lux * LUX_DELTA_PCT;
-}
-
 bool battery_changed() { return abs((int)rtc.batt_mv - (int)rtc.sent_mv) >= BATT_DELTA_MV; }
 
 void report() {
@@ -229,12 +212,7 @@ void timer_wake() {
     if (now - rtc.sent_s + 60 >= OFF_REPORT_S) report();
     return;
   }
-  // Stuck-key checks wake us every minute; read the light only every REPORT_EVERY_S.
-  if (now - rtc.lux_read_s + 30 >= REPORT_EVERY_S) {
-    sensors::lux_start();
-    poll_lux(true);
-  }
-  if (lux_changed() || battery_changed() || now - rtc.sent_s + 30 >= HEARTBEAT_S) report();
+  if (battery_changed() || now - rtc.sent_s + 30 >= HEARTBEAT_S) report();
 }
 
 uint32_t dots_until = 0;  // listening for scene-state dots until then
@@ -258,7 +236,6 @@ void handle(const keys::Gesture &g) {
     return;
   }
 
-  poll_lux(false);
   const uint8_t dots = keys::dots(g.key);
   switch (transmit(make_msg(hk::T_PRESS, g.key, g.kind))) {
     case radio::OK:
@@ -348,7 +325,6 @@ void interactive(bool cold) {
   if (cold) {
     show_sweep(true);
     wait_fx();
-    poll_lux(false);
     if (transmit(make_msg(hk::T_STATUS, 0, hk::S_BOOT)) == radio::FAIL)
       fx::play(NO_GATEWAY_TONE, COUNT(NO_GATEWAY_TONE));
   }
@@ -400,6 +376,7 @@ void setup() {
     memset(&rtc, 0, sizeof(rtc));
     rtc.magic = RTC_MAGIC;
     rtc.seq = (uint8_t)random(256);  // so the gateway doesn't mistake new messages for repeats
+    rtc.dot_level = DOT_LEVEL_UNKNOWN;
   }
   keys::begin(rtc.stuck);
   fx::begin();
@@ -442,7 +419,6 @@ void setup() {
 
   // A key woke us (or this is a fresh boot): the remote is in the hand.
   rtc.watch_move = false;
-  sensors::lux_start();  // ready in 180 ms, in time to dim the confirmation flash
   fx::set_scale(dot_scale());
   keys::seed(wake_pins);
   if (!rtc.off) radio::start();  // Wi-Fi starts while we wait to see if it's a double tap

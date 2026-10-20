@@ -9,7 +9,7 @@ HK remote (XIAO ESP32-C3, battery)  --ESP-NOW-->  HK Hub (SuperMini, USB)  --Wi-
 
 | Folder | What | Built with |
 |--------|------|------------|
-| `remote/` | Deep-sleeping remote: keys, dots, buzzer, BH1750, battery, ADXL345 (HK-22) | PlatformIO (Arduino, `espressif32 @ 7.1.3`) |
+| `remote/` | Deep-sleeping remote: keys, dots, buzzer, battery, ADXL345 (HK-22) | PlatformIO (Arduino, `espressif32 @ 7.1.3`) |
 | `gateway/hk-hub.yaml` | The hub device | ESPHome 2026.9 or newer (ESP-NOW component) |
 | `gateway/hk/hk-gateway.yaml` | Everything HK-specific, as a package (reusable in a radar pod) | ESPHome |
 
@@ -21,7 +21,7 @@ HK remote (XIAO ESP32-C3, battery)  --ESP-NOW-->  HK Hub (SuperMini, USB)  --Wi-
 | Press 1+3, 2+3 or 3+4 together | Same event with key `1+3`, `2+3` or `3+4` (1+2 reads as key 4 because of the diodes) |
 | Hold key 4 for 5 s | Keys off: presses are ignored. Its dot glows from 1 s on to show the hold. Hold 5 s again to turn the keys back on |
 | Battery below 3.55 V | Warns after each press. Below 3.40 V it shuts down until it's charged above 3.70 V |
-| Every 5 min | Reads light and battery, and sends them when they change (or every 30 min anyway). If the hub doesn't answer, the remote tries again only every 30 min |
+| Every 15 min | Checks the battery, and sends it when it changes (or every 30 min anyway). If the hub doesn't answer, the remote tries again only every 30 min |
 | Pick it up after it has lain level, face up, for 10 s (HK-22 with ADXL345) | `esphome.hk_motion` event, motion `pickup`. The dots glow softly, and the radio is already on for your first press. Silent: no chirp |
 | Shake it hard (3 or more swings within about 1 s) | `esphome.hk_motion`, motion `shake` |
 | Turn it face down in your hand and hold it still for 1 s | `esphome.hk_motion`, motion `flip`. Don't lay it face down on a table: that presses the keys |
@@ -42,7 +42,7 @@ What the remote shows:
 | All dots blink twice, two low beeps | Battery low, charge it soon |
 | All dots, long low tone | Battery empty, shutting down |
 
-The dots dim themselves in a dark room using the BH1750 reading (`DOT_MIN` / `DOT_MAX` in `config.h`).
+Home Assistant sets how bright the dots are: the hub's **Remote dot brightness** entity (0–100 %, default 60). The hub sends it with every reply, so a change shows from the next press. The scale is squared, so 20 % is a soft glow for a dark room. Until the remote has heard from the hub it uses `DOT_DEFAULT_PCT` in `config.h`.
 
 The hub's blue dot pulses slowly while it connects, glows dimly once Home Assistant is connected, and flashes when it relays a press. The **Status dot brightness** entity sets the dim level, and 0 turns it off.
 
@@ -94,7 +94,8 @@ There is no pairing. The remote broadcasts on each channel until a hub answers, 
 The hub device gets these entities:
 
 - **Events** `Key 1` … `Key 4`, `Keys 1+3`, `Keys 2+3`, `Keys 3+4`, each with the types `single`, `double`, `long`; `Motion` with the types `pickup`, `shake`, `flip`.
-- **Sensors:** `Remote light level` (lx), `Remote battery` (%), `Remote battery voltage`, `Remote signal`.
+- **Sensors:** `Remote battery` (%), `Remote battery voltage`, `Remote signal`.
+- **Number:** `Remote dot brightness` (0–100 %): how bright the key dots are.
 - **Binary sensors:** `Remote keys off`, `Remote battery low`.
 
 It also fires bus events, which are the easiest thing to automate on:
@@ -177,6 +178,22 @@ actions:
             target: { area_id: living_room }
 ```
 
+Dim the dots at night:
+
+```yaml
+alias: HK remote dots, day and night
+triggers:
+  - trigger: sun
+    event: sunset
+  - trigger: sun
+    event: sunrise
+actions:
+  - action: number.set_value
+    target: { entity_id: number.hk_hub_remote_dot_brightness }
+    data:
+      value: "{{ 20 if trigger.event == 'sunset' else 100 }}"
+```
+
 A low-battery reminder:
 
 ```yaml
@@ -219,4 +236,4 @@ Both builds compile, but nothing has run on hardware yet. Check these on the fir
 
 ## Protocol
 
-There are 13-byte messages from the remote and 7-byte replies from the hub, described in [remote/src/hk_protocol.h](remote/src/hk_protocol.h). The gateway lambdas use the same byte offsets, so change both together.
+There are 13-byte messages from the remote, and 8-byte acks (with the dot brightness) and 7-byte scene-dot messages from the hub, described in [remote/src/hk_protocol.h](remote/src/hk_protocol.h). The gateway lambdas use the same byte offsets, so change both together.

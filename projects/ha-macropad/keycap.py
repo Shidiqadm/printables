@@ -53,9 +53,16 @@ RIB_LEAD = 0.3             # 45 degree lead-in on the rib's mouth end
 CEN_MIN = (Align.CENTER, Align.CENTER, Align.MIN)
 
 
+def cap_top_radius():
+    """Corner radius of the cap's top: concentric with the skirt (Apple's rule: the radius
+    shrinks by exactly the inset, so the side's draft is even all the way round)."""
+    return CAP_R - (CAP - CAP_TOP) / 2
+
+
 def tapered_block(bottom, top, h, r_bottom):
-    """Rounded square lofted from `bottom` to `top`, corner radius scaled with size."""
-    r_top = r_bottom * top / bottom
+    """Rounded square lofted from `bottom` to `top`, corners concentric (radius shrinks with
+    the inset)."""
+    r_top = r_bottom - (bottom - top) / 2
     return loft([RectangleRounded(bottom, bottom, r_bottom),
                  Pos(0, 0, h) * RectangleRounded(top, top, r_top)])
 

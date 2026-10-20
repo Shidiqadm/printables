@@ -1,5 +1,5 @@
 # HK gateway package: receives the HK remote over ESP-NOW and turns it into Home Assistant
-# events, event entities and sensors. Include it from a device config: hk-hub.yaml, or a
+# events, event entities and sensors. It also sends the remote its dot brightness. Include it from a device config: hk-hub.yaml, or a
 # radar pod's config (see ../../README.md).
 #
 # The byte offsets in the lambdas below follow ../../remote/src/hk_protocol.h. Change both
@@ -97,7 +97,8 @@ espnow:
             const bool dots = id(hk_dots_used) && id(hk_presses_without_dot) < 20;
             const std::vector<uint8_t> ack = {'H', 'K', 1, 0x81, seq,
                                               (uint8_t) ((ha ? 1 : 0) | (dots ? 2 : 0)),
-                                              id(hk_espnow).get_wifi_channel()};
+                                              id(hk_espnow).get_wifi_channel(),
+                                              (uint8_t) id(hk_remote_dots).state};
             id(hk_espnow).send(info.src_addr, ack);
             memcpy(id(hk_remote_mac).data(), info.src_addr, 6);
             id(hk_remote_seen) = millis();
@@ -110,13 +111,11 @@ espnow:
             id(hk_last_packet) = tag;
             id(hk_last_packet_ms) = millis();
 
-            // Every message carries battery, light and flags.
+            // Every message carries battery and flags. Bytes 10-11 (light) are unused since v0.9.
             id(hk_remote_id) = data[5];
             const uint16_t mv = data[8] | (data[9] << 8);
-            const uint16_t lux = data[10] | (data[11] << 8);
             const uint8_t flags = data[12];
             if (mv > 0) id(hk_battery_v).publish_state(mv / 1000.0f);
-            if (lux != 0xFFFF) id(hk_light).publish_state(lux);
             id(hk_keys_off).publish_state(flags & 1);
             id(hk_battery_low).publish_state(flags & 2);
             if (info.rx_ctrl != nullptr) id(hk_signal).publish_state(info.rx_ctrl->rssi);
@@ -228,14 +227,6 @@ event:
 
 sensor:
   - platform: template
-    id: hk_light
-    name: "Remote light level"
-    unit_of_measurement: lx
-    device_class: illuminance
-    state_class: measurement
-    accuracy_decimals: 0
-    update_interval: never
-  - platform: template
     id: hk_battery_v
     name: "Remote battery voltage"
     unit_of_measurement: V
@@ -308,6 +299,19 @@ light:
           max_brightness: 40%
 
 number:
+  # How bright the remote's key dots are, 0-100 %. The remote gets it with every reply, so a
+  # change applies from the next press. Set it from an automation: dim after sunset.
+  - platform: template
+    id: hk_remote_dots
+    name: "Remote dot brightness"
+    icon: mdi:brightness-6
+    unit_of_measurement: "%"
+    min_value: 0
+    max_value: 100
+    step: 5
+    initial_value: 60
+    optimistic: true
+    restore_value: true
   - platform: template
     id: hk_led_brightness
     name: "Status dot brightness"

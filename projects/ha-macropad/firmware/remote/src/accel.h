@@ -1,4 +1,4 @@
-// ADXL345 accelerometer (GY-291 module) on the BH1750's I2C bus, HK-22 only.
+// ADXL345 accelerometer (GY-291 module) on the I2C bus (D4 / D5), HK-22 only.
 //
 // It watches for motion by itself while the chip deep-sleeps, and pulls D3 low through a
 // diode when something happens. D3 is also key 3, so while we're awake its interrupt is off

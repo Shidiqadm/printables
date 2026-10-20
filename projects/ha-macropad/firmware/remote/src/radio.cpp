@@ -32,7 +32,7 @@ volatile uint32_t sends_done = 0;
 volatile bool last_delivered = false;
 volatile uint8_t wait_seq = 0;
 volatile bool ack_got = false;
-volatile uint8_t ack_flags = 0, ack_channel = 0;
+volatile uint8_t ack_flags = 0, ack_channel = 0, ack_level = DOT_LEVEL_UNKNOWN;
 uint8_t ack_mac[6];
 volatile bool dots_got = false;
 volatile uint8_t dots_mask = 0, dots_ds = 0;
@@ -46,6 +46,7 @@ void on_recv(const uint8_t *mac, const uint8_t *data, int len) {
     memcpy(ack_mac, mac, 6);
     ack_flags = data[5];
     ack_channel = data[6];
+    ack_level = len >= 8 ? data[7] : DOT_LEVEL_UNKNOWN;  // older gateways send 7 bytes
     ack_got = true;
   } else if (data[3] == hk::T_DOTS) {
     dots_mask = data[5];
@@ -184,6 +185,7 @@ Result send(const hk::Msg &msg, Idle idle, bool scan_allowed) {
     return FAIL;
   }
   rtc.dots_feature = ack_flags & hk::A_DOTS;
+  if (ack_level <= 100) rtc.dot_level = ack_level;
   return (ack_flags & hk::A_HA) ? OK : NO_HA;
 }
 

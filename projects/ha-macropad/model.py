@@ -83,7 +83,7 @@ def run_remote(kind):
           f"from the deck at rest, {L.P + remote.CAP_SEAT - remote.SW_TRAVEL - L.H:+.1f} mm pressed; "
           f"label strokes >= 2 lines: {label_stroke_ok(L.name)}")
     bp = remote.bought_parts(L)
-    shown = [k for k in ("xiao", "lipo", "buzzer", "bh1750", "adxl345", "antenna") if k in bp]
+    shown = [k for k in ("xiao", "lipo", "buzzer", "adxl345", "antenna") if k in bp]
     return [a.shell, a.plate, a.base, *a.caps, *[bp[k] for k in shown]], \
         ["shell", "plate", "base", *[f"key {i + 1}" for i in range(len(a.caps))], *shown]
 

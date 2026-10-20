@@ -8,7 +8,7 @@ Run: uv run projects/ha-macropad/test_fit.py [keycap hk4 hk22 hub ld2410c ld2450
     hides the switch housings
   - the keycap socket's crush ribs squeeze the stem arm ends, and the cross fits either way round
   - the plate rests on the well's ledge, below the deck, and its snap beams hold it down
-  - the light sensor sits in its snap cradle: it can't drop out or push into the deck
+  - the accelerometer (HK-22) sits in its snap cradle: it can't drop out or push into the deck
   - each USB-C plug can reach full insertion through the wall in front of its receptacle
   - the hub's snap clips stay under ~1.5 % bending strain
 """
@@ -59,6 +59,28 @@ def test_remote(kind: str, failures: list) -> None:
     margin = min(lb.min.X, lb.min.Y, L.W - lb.max.X, L.D - lb.max.Y)
     check(margin >= 5.0, f"engraved name {margin:.1f} mm in from the base's edge (at x {(lb.min.X + lb.max.X) / 2:.1f}"
           f" of {L.W:.1f})", failures)
+    # Concentric corners (Apple's rule): the front-left corner of the cap top, the cap skirt,
+    # the key well and the body all curve round one centre, so every gap stays even.
+    kx = L.keys[0][0] if L.kind == "bar" else min(x for x, _ in L.keys)
+    centres = {"cap top": kx - keycap.CAP_TOP / 2 + keycap.cap_top_radius(),
+               "cap skirt": kx - keycap.CAP / 2 + keycap.CAP_R,
+               "key well": L.well.x0 + L.well.r,
+               "body": remote.R_BODY}
+    spread = max(centres.values()) - min(centres.values())
+    check(spread < 0.01, "concentric corners: " + ", ".join(f"{k} {v:.2f}" for k, v in centres.items()), failures)
+    # LED pockets (2835 strip pieces): enough plastic to the outside and to the key well that
+    # no light shows anywhere but the dot
+    w = L.well
+    skins = []
+    for (x, y), along_x in remote.led_spots(L):
+        hx, hy = remote.led_pocket_half(along_x)
+        skins += [x - hx, L.W - (x + hx), y - hy, L.D - (y + hy)]  # to the outside
+        if w.y0 <= y <= w.y0 + w.d:  # beside the well
+            skins.append(w.x0 - (x + hx) if x < w.x0 else (x - hx) - (w.x0 + w.w))
+        elif w.x0 <= x <= w.x0 + w.w:  # in front of or behind it
+            skins.append(w.y0 - (y + hy) if y < w.y0 else (y - hy) - (w.y0 + w.d))
+    check(min(skins) >= 1.0, f"{len(remote.led_spots(L))} LED pockets, {min(skins):.2f} mm of plastic to the outside "
+          f"and the key well", failures)
     hidden = L.H - (L.P + remote.SW_ABOVE)
     check(hidden >= 0, f"switch housings {hidden:.1f} mm below the deck: hidden in the well", failures)
     # The plate's bevel is modelled PLATE_CLEAR inside the ledge; it settles that far down
@@ -82,15 +104,19 @@ def test_remote(kind: str, failures: list) -> None:
     lifted = interference({"shell": a.shell, "plate": Pos(0, 0, 0.2) * a.plate}, {})
     check(bool(lifted), "plate lifted 0.2 mm hits the snap catches", failures)
 
-    # BH1750 cradle: the board can't fall out or push up into the deck
-    board = remote.bought_parts(L)["bh1750"]
-    strain = remote.bh_strain(L)
-    check(strain <= 0.016, f"light sensor cradle beam strain {strain * 100:.2f} %", failures)
-    held = (interference({"shell": a.shell}, {"bh1750": Pos(0, 0, -0.2) * board})
-            and interference({"shell": a.shell}, {"bh1750": Pos(0, 0, 0.2) * board}))
-    check(bool(held), "light sensor held: 0.2 mm down hits the lips, 0.2 mm up hits the corner tabs", failures)
+    # Base snaps: no screws. Pulled 0.3 mm off, the bumps must hit their pockets' edges; pushed
+    # sideways, the rim must hit the walls; the walls must flex gently.
+    strain = remote.detent_strain(L)
+    check(strain <= 0.016, f"base snaps: {len(L.detents)} bumps, wall flex {strain * 100:.2f} % (PLA: keep under ~1.6 %)",
+          failures)
+    pulled = interference({"shell": a.shell, "base": Pos(0, 0, -0.3) * a.base}, {})
+    pushed = (interference({"shell": a.shell, "base": Pos(0.3, 0, 0) * a.base}, {})
+              and interference({"shell": a.shell, "base": Pos(0, 0.3, 0) * a.base}, {}))
+    check(bool(pulled) and bool(pushed), "base pulled 0.3 mm off hits the snaps; the rim stops it sliding", failures)
+    skin = remote.WALL - remote.DETENT_POCKET
+    check(skin >= 0.84, f"snap pockets leave {skin:.2f} mm of wall outside: hidden", failures)
 
-    # ADXL345 cradle (HK-22): the same snap cradle, lips on the board's short edges
+    # ADXL345 cradle (HK-22): lips on the board's short edges
     if L.adxl:
         board = remote.bought_parts(L)["adxl345"]
         strain = remote.adxl_strain()

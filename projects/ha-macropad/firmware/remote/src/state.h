@@ -18,19 +18,18 @@ struct RtcState {
   uint8_t stuck;          // key pins held down when we last went to sleep
 
   uint16_t batt_mv;       // last measurement (0 = divider not fitted)
-  bool lux_valid;
-  uint16_t lux;           // last BH1750 reading
-  uint32_t lux_read_s;
-
-  uint16_t sent_mv;       // values the gateway last confirmed
-  uint16_t sent_lux;
+  uint16_t sent_mv;       // value the gateway last confirmed
   uint32_t sent_s;
   uint32_t report_failed_s;  // last timer report nobody answered (0 = none)
 
   bool watch_move;        // accelerometer: lying still, so wake on a move (else: in the hand)
   uint32_t rest_s;        // when it was last put down level and face up (0 = not lying so)
+
+  uint8_t dot_level;      // dot brightness from Home Assistant, 0-100 % (DOT_LEVEL_UNKNOWN: none yet)
 };
+
+constexpr uint8_t DOT_LEVEL_UNKNOWN = 0xFF;
 
 extern RtcState rtc;
 
-constexpr uint32_t RTC_MAGIC = 0x484B0108;  // 'HK' v1.8: change to reset state on update
+constexpr uint32_t RTC_MAGIC = 0x484B0109;  // 'HK' v1.9: change to reset state on update
