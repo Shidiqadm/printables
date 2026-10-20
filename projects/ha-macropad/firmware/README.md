@@ -9,7 +9,7 @@ HK remote (XIAO ESP32-C3, battery)  --ESP-NOW-->  HK Hub (SuperMini, USB)  --Wi-
 
 | Folder | What | Built with |
 |--------|------|------------|
-| `remote/` | Deep-sleeping remote: keys, dots, buzzer, BH1750, battery | PlatformIO (Arduino, `espressif32 @ 7.1.3`) |
+| `remote/` | Deep-sleeping remote: keys, dots, buzzer, BH1750, battery, ADXL345 (HK-22) | PlatformIO (Arduino, `espressif32 @ 7.1.3`) |
 | `gateway/hk-hub.yaml` | The hub device | ESPHome 2026.9 or newer (ESP-NOW component) |
 | `gateway/hk/hk-gateway.yaml` | Everything HK-specific, as a package (reusable in a radar pod) | ESPHome |
 
@@ -22,6 +22,9 @@ HK remote (XIAO ESP32-C3, battery)  --ESP-NOW-->  HK Hub (SuperMini, USB)  --Wi-
 | Hold key 4 for 5 s | Keys off: presses are ignored. Its dot glows from 1 s on to show the hold. Hold 5 s again to turn the keys back on |
 | Battery below 3.55 V | Warns after each press. Below 3.40 V it shuts down until it's charged above 3.70 V |
 | Every 5 min | Reads light and battery, and sends them when they change (or every 30 min anyway). If the hub doesn't answer, the remote tries again only every 30 min |
+| Pick it up after it has lain level, face up, for 10 s (HK-22 with ADXL345) | `esphome.hk_motion` event, motion `pickup`. The dots glow softly, and the radio is already on for your first press. Silent: no chirp |
+| Shake it hard (3 or more swings within about 1 s) | `esphome.hk_motion`, motion `shake` |
+| Turn it face down in your hand and hold it still for 1 s | `esphome.hk_motion`, motion `flip`. Don't lay it face down on a table: that presses the keys |
 
 What the remote shows:
 
@@ -34,6 +37,8 @@ What the remote shows:
 | Dots sweep 4→1, falling tones | Keys off |
 | Dots sweep 1→4, rising tones | Keys on, or just booted |
 | Dot 4 blinks dimly | The keys are off (hold key 4 for 5 s) |
+| All dots flash, chirp | Home Assistant got a shake or a flip |
+| All dots glow softly | Picked up |
 | All dots blink twice, two low beeps | Battery low, charge it soon |
 | All dots, long low tone | Battery empty, shutting down |
 
@@ -88,7 +93,7 @@ There is no pairing. The remote broadcasts on each channel until a hub answers, 
 
 The hub device gets these entities:
 
-- **Events** `Key 1` … `Key 4`, `Keys 1+3`, `Keys 2+3`, `Keys 3+4`, each with the types `single`, `double`, `long`.
+- **Events** `Key 1` … `Key 4`, `Keys 1+3`, `Keys 2+3`, `Keys 3+4`, each with the types `single`, `double`, `long`; `Motion` with the types `pickup`, `shake`, `flip`.
 - **Sensors:** `Remote light level` (lx), `Remote battery` (%), `Remote battery voltage`, `Remote signal`.
 - **Binary sensors:** `Remote keys off`, `Remote battery low`.
 
@@ -96,6 +101,7 @@ It also fires bus events, which are the easiest thing to automate on:
 
 - `esphome.hk_press` with `key`, `press` and `remote`
 - `esphome.hk_status` with `status`: `boot`, `on`, `off` or `shutdown`
+- `esphome.hk_motion` with `motion`: `pickup`, `shake` or `flip`, and `remote`
 
 **Scene-state dots:** call `esphome.hk_hub_show_dot` with `key: 1`–`4` (or `0` for none). The remote lights that dot for about a second. It only listens for 1.5 s after a press, so call it first, before the scene. Once you've used it, the remote waits for the reply after every press. A press without one costs an extra 1.5 s awake. After 20 presses with no `show_dot`, the hub tells the remote to stop waiting, until the next call.
 
@@ -147,6 +153,30 @@ actions:
             target: { entity_id: scene.movie }
 ```
 
+Motion (HK-22 with the ADXL345). Calling `show_dot` on a pickup lights the current scene's dot as you lift the remote:
+
+```yaml
+alias: HK remote motion
+mode: queued
+triggers:
+  - trigger: event
+    event_type: esphome.hk_motion
+actions:
+  - choose:
+      - conditions: "{{ trigger.event.data.motion == 'pickup' }}"
+        sequence:
+          - action: esphome.hk_hub_show_dot
+            data: { key: 1 }   # the scene that's on now
+      - conditions: "{{ trigger.event.data.motion == 'shake' }}"
+        sequence:
+          - action: scene.turn_on
+            target: { entity_id: scene.party }
+      - conditions: "{{ trigger.event.data.motion == 'flip' }}"
+        sequence:
+          - action: light.turn_off
+            target: { area_id: living_room }
+```
+
 A low-battery reminder:
 
 ```yaml
@@ -181,6 +211,9 @@ Both builds compile, but nothing has run on hardware yet. Check these on the fir
 - **Hub LED:** the SuperMini's LED is on GPIO8 on most boards. If yours differs, change `hk_led_pin` in `hk-gateway.yaml`.
 - **Battery life:** not measured. Deep sleep is about 44 µA (Seeed's figure) plus 4 µA for the divider. Each press keeps the radio on for about 0.5 s, or about 2 s with scene dots.
 - **Arduino core:** the remote is built and tested on the pinned `espressif32 @ 7.1.3` (Arduino core 2.0.17). Core 3.x has `#if` paths for the changed ESP-NOW callbacks, but they haven't been compiled.
+- **ADXL345 (motion):** built and the shake detector tested on simulated motion only. On the first build, check with `HK_DEBUG 1`: the log shows `wake … motion=16` on a pickup (8 = still, 64 = jolt) and `still: up axis 0.98 g` when it lies face up. If the up axis reads about -1 g face up, the board sits chip-down: set `ACCEL_Z_UP -1`. Tune `ACCEL_MOVE_MG` if a key press on the table counts as a pickup, or a gentle lift doesn't; `SHAKE_G` / `SHAKE_REVERSALS` for the shake.
+- **Key 3 and motion share D3:** the remote reads the ADXL345 first at every wake to tell them apart. A very quick tap on key 3 at the same moment as a lift can be read as motion.
+- **Battery life with the ADXL345:** about 25–45 µA more, from the datasheet (it samples at 8 Hz while the remote lies still, 25 Hz while it's in the hand). Expect roughly 3½–4 months per charge instead of 4–5. Hold key 4 for 5 s (keys off) to put it in standby too.
 - **Stuck keys:** a key that stays held (in a bag) is ignored until it comes up, which saves the battery. While key 1 is stuck, key 4 reads as key 2, because they share D0.
 - **No encryption:** the ESP-NOW link isn't encrypted (ESPHome's ESP-NOW component has none). Someone in radio range with an ESP32 could fake key presses. `HK_GATEWAY_MAC` stops the remote from talking to a different hub, but nothing stops a fake remote. Don't map the keys to locks or alarms.
 

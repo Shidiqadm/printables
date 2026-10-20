@@ -26,8 +26,11 @@ struct RtcState {
   uint16_t sent_lux;
   uint32_t sent_s;
   uint32_t report_failed_s;  // last timer report nobody answered (0 = none)
+
+  bool watch_move;        // accelerometer: lying still, so wake on a move (else: in the hand)
+  uint32_t rest_s;        // when it was last put down level and face up (0 = not lying so)
 };
 
 extern RtcState rtc;
 
-constexpr uint32_t RTC_MAGIC = 0x484B0107;  // 'HK' v1.7: change to reset state on update
+constexpr uint32_t RTC_MAGIC = 0x484B0108;  // 'HK' v1.8: change to reset state on update

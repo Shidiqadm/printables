@@ -1,10 +1,12 @@
 """Interference and fit checks for every HK assembly (assembly coordinates).
 
-Run: uv run projects/ha-macropad/test_fit.py [hk4 hk22 hub ld2410c ld2450]   (default: all)
+Run: uv run projects/ha-macropad/test_fit.py [keycap hk4 hk22 hub ld2410c ld2450]   (default: all)
 
   - no printed part overlaps another, and no bought part (switches with their wiring room,
     XIAO, LiPo, BH1750, buzzer, LEDs, antenna, radar boards) overlaps anything
-  - keycaps clear the switch housing and the well, at rest and fully pressed
+  - keycaps clear the switch housing and the well, at rest and fully pressed, and the deck
+    hides the switch housings
+  - the keycap socket's crush ribs squeeze the stem arm ends, and the cross fits either way round
   - the plate rests on the well's ledge, below the deck, and its snap beams hold it down
   - the light sensor sits in its snap cradle: it can't drop out or push into the deck
   - each USB-C plug can reach full insertion through the wall in front of its receptacle
@@ -17,9 +19,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 import hub  # noqa: E402
+import keycap  # noqa: E402
 import radar  # noqa: E402
 import remote  # noqa: E402
-from build123d import Pos  # noqa: E402
+from build123d import Align, Box, Pos  # noqa: E402
 
 from style import USB_SKIN, interference  # noqa: E402
 
@@ -44,8 +47,16 @@ def test_remote(kind: str, failures: list) -> None:
     rest = L.P + remote.CAP_SEAT - L.H
     pressed = rest - remote.SW_TRAVEL
     check(L.P + remote.CAP_SEAT - remote.SW_TRAVEL > L.P + 1.0,
-          f"keycap skirt {rest:.1f} mm above the deck at rest, {pressed:+.1f} mm pressed, clear of the plate",
+          f"keycap skirt {rest:+.1f} mm from the deck at rest, {pressed:+.1f} mm pressed, clear of the plate",
           failures)
+    floor = remote.BASE - remote.BATT_POCKET
+    pocket = Pos(*L.bay_c, 0) * Box(L.bay_pl, L.bay_pw, remote.BASE, align=(Align.CENTER, Align.CENTER, Align.MIN))
+    under = a.label & pocket
+    check(floor >= 0.8 and not (under and under.solids()),
+          f"battery pocket {remote.BATT_POCKET} mm deep, {floor:.1f} mm floor under it, clear of the engraved name",
+          failures)
+    hidden = L.H - (L.P + remote.SW_ABOVE)
+    check(hidden >= 0, f"switch housings {hidden:.1f} mm below the deck: hidden in the well", failures)
     # The plate's bevel is modelled PLATE_CLEAR inside the ledge; it settles that far down
     check(remote.PLATE_CLEAR < remote.LEDGE,
           f"plate settles {remote.PLATE_CLEAR:.2f} mm onto its {remote.LEDGE} mm ledge, "
@@ -74,6 +85,16 @@ def test_remote(kind: str, failures: list) -> None:
     held = (interference({"shell": a.shell}, {"bh1750": Pos(0, 0, -0.2) * board})
             and interference({"shell": a.shell}, {"bh1750": Pos(0, 0, 0.2) * board}))
     check(bool(held), "light sensor held: 0.2 mm down hits the lips, 0.2 mm up hits the corner tabs", failures)
+
+    # ADXL345 cradle (HK-22): the same snap cradle, lips on the board's short edges
+    if L.adxl:
+        board = remote.bought_parts(L)["adxl345"]
+        strain = remote.adxl_strain()
+        check(strain <= 0.016, f"accelerometer cradle beam strain {strain * 100:.2f} %", failures)
+        held = (interference({"shell": a.shell}, {"adxl345": Pos(0, 0, -0.2) * board})
+                and interference({"shell": a.shell}, {"adxl345": Pos(0, 0, 0.2) * board}))
+        check(bool(held), "accelerometer held: 0.2 mm down hits the lips, 0.2 mm up hits the corner tabs",
+              failures)
     check(PLUG_SHELL - USB_SKIN >= PLUG_MATED,
           f"USB-C: receptacle {USB_SKIN} mm inside the port, plug seats {PLUG_SHELL - USB_SKIN:.2f} mm "
           f"(needs {PLUG_MATED})", failures)
@@ -107,7 +128,42 @@ def test_radar(kind: str, failures: list) -> None:
         check(shape.is_valid and len(shape.solids()) == 1, f"{name} is one valid solid", failures)
 
 
-TESTS = {"hk4": lambda f: test_remote("bar", f), "hk22": lambda f: test_remote("square", f), "hub": test_hub,
+def free_run(shape, z, along_x, offset=0.0):
+    """Length of the empty run through the socket axis at height z, along x or y (offset
+    sideways from the axis)."""
+    probe = Box(12, 0.02, 0.02) if along_x else Box(0.02, 12, 0.02)
+    gap = (Pos(0, offset, z) if along_x else Pos(offset, 0, z)) * probe - shape
+    for s in gap.solids():
+        bb = s.bounding_box()
+        lo, hi = (bb.min.X, bb.max.X) if along_x else (bb.min.Y, bb.max.Y)
+        if lo < 0 < hi or (offset and lo < 1.4 < hi):
+            return hi - lo
+    return 0.0
+
+
+def test_keycap(failures: list) -> None:
+    """The socket takes the cross either way round, and its crush ribs squeeze the arm ends."""
+    cap = keycap.make_keycap()
+    print("keycap socket")
+    mid = (keycap.RIB_START + keycap.RIB_LEAD + keycap.STEM_DEPTH) / 2
+    want = keycap.STEM_ARM - 2 * keycap.RIB_GRIP
+    for along_x in (True, False):
+        arm = "x" if along_x else "y"
+        length = free_run(cap, mid, along_x)
+        check(abs(length - want) < 0.02,
+              f"{arm} arm: ribs leave {length:.2f} mm for the {keycap.STEM_ARM} mm stem arm "
+              f"(squeeze {keycap.RIB_GRIP:.2f} mm per end)", failures)
+        width = free_run(cap, mid, not along_x, offset=1.4)
+        check(abs(width - (keycap.CROSS_W + keycap.STEM_SLOP)) < 0.02,
+              f"{arm} arm slot {width:.2f} mm wide, so the cap goes on either way round", failures)
+    mouth = free_run(cap, keycap.RIB_START - 0.05, True)
+    check(mouth > keycap.STEM_ARM, f"mouth {mouth:.2f} mm long: the stem starts in before it meets the ribs",
+          failures)
+    check(cap.is_valid and len(cap.solids()) == 1, "keycap is one valid solid", failures)
+
+
+TESTS = {"keycap": test_keycap, "hk4": lambda f: test_remote("bar", f), "hk22": lambda f: test_remote("square", f),
+         "hub": test_hub,
          "ld2410c": lambda f: test_radar("ld2410c", f), "ld2450": lambda f: test_radar("ld2450", f)}
 
 

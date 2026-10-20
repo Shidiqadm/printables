@@ -20,7 +20,7 @@ from build123d import Align, Box, FontStyle, Pos, Text, extrude  # noqa: E402
 import hub  # noqa: E402
 import radar  # noqa: E402
 import remote  # noqa: E402
-from keycap import STEM_SLOP, stem_test_post  # noqa: E402
+from keycap import RIB_GRIP, stem_test_post  # noqa: E402
 from printlib import check, export, preview  # noqa: E402
 from style import FONT, label_stroke_ok  # noqa: E402
 
@@ -29,16 +29,17 @@ CEN_MIN = (Align.CENTER, Align.CENTER, Align.MIN)
 
 
 def stem_test():
-    """A bar with five keycap posts, stem sockets from tight to loose. The posts are the
-    cap's own post (5.5 mm, chamfered tip), so they also go into a box stem's square rim.
-    Turn the bar over and push a post onto a switch."""
-    slops = [round(STEM_SLOP + d, 2) for d in (-0.10, -0.05, 0.0, 0.05, 0.10)]
+    """A bar with five keycap posts whose crush ribs squeeze the stem from not at all (00) to
+    0.20 mm per arm end (20). The posts are the cap's own post (5.5 mm, chamfered tip), so
+    they also go into a box stem's square rim. Turn the bar over, push a post onto a switch,
+    then pull it off: pick the smallest number that needs a firm tug."""
+    grips = [round(RIB_GRIP + d, 2) for d in (-0.10, -0.05, 0.0, 0.05, 0.10)]
     pitch = 12.6
-    body = Box(pitch * len(slops) + 3, 20, 1.2, align=(Align.MIN, Align.MIN, Align.MIN))
-    for i, s in enumerate(slops):
+    body = Box(pitch * len(grips) + 3, 20, 1.2, align=(Align.MIN, Align.MIN, Align.MIN))
+    for i, g in enumerate(grips):
         x = 3 + 6 + i * pitch
-        body += Pos(x, 7, 1.2 - 0.01) * stem_test_post(s)
-        txt = Text(f"{int(round(s * 100)):02d}", font_size=4.0, font=FONT, font_style=FontStyle.BOLD)
+        body += Pos(x, 7, 1.2 - 0.01) * stem_test_post(g)
+        txt = Text(f"{int(round(g * 100)):02d}", font_size=4.0, font=FONT, font_style=FontStyle.BOLD)
         body -= Pos(x, 15.5, 0.6) * extrude(txt, amount=0.61)
     return body
 
@@ -78,13 +79,13 @@ def run_remote(kind):
     assembly = {"shell": a.shell, "plate": a.plate, "base": a.base, "label": a.label,
                 **{f"keycap {i + 1}": c for i, c in enumerate(a.caps)}}
     export_parts(L.slug, poses, assembly)
-    print(f"[info] {L.name}: body {L.W:.2f} x {L.D:.2f} x {L.H:.1f} mm, keys {L.P + remote.CAP_SEAT - L.H:.1f} mm "
-          f"above the deck at rest, {L.P + remote.CAP_SEAT - remote.SW_TRAVEL - L.H:+.1f} mm pressed; "
+    print(f"[info] {L.name}: body {L.W:.2f} x {L.D:.2f} x {L.H:.1f} mm, cap skirts {L.P + remote.CAP_SEAT - L.H:+.1f} mm "
+          f"from the deck at rest, {L.P + remote.CAP_SEAT - remote.SW_TRAVEL - L.H:+.1f} mm pressed; "
           f"label strokes >= 2 lines: {label_stroke_ok(L.name)}")
     bp = remote.bought_parts(L)
-    return [a.shell, a.plate, a.base, *a.caps, *[bp[k] for k in ("xiao", "lipo", "buzzer", "bh1750", "antenna")]], \
-        ["shell", "plate", "base", *[f"key {i + 1}" for i in range(len(a.caps))], "xiao", "lipo", "buzzer", "bh1750",
-         "antenna"]
+    shown = [k for k in ("xiao", "lipo", "buzzer", "bh1750", "adxl345", "antenna") if k in bp]
+    return [a.shell, a.plate, a.base, *a.caps, *[bp[k] for k in shown]], \
+        ["shell", "plate", "base", *[f"key {i + 1}" for i in range(len(a.caps))], *shown]
 
 
 def run_hub():

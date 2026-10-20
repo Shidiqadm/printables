@@ -1,7 +1,7 @@
 # HK — Home Keys
 
-**Status:** test-print (v0.8: clips and print settings after the first HK-22 print)
-**Created:** 2026-10-08 · **Redesigned:** 2026-10-16 · **Updated:** 2026-10-17
+**Status:** test-print (v0.9: keycap crush ribs, keys sunk into the deck, ADXL345 motion sensor on the HK-22)
+**Created:** 2026-10-08 · **Redesigned:** 2026-10-16 · **Updated:** 2026-10-20
 **Inspiration:** [Hot-Swappable, Multi-Layer Macropad](https://makerworld.com/en/models/2495365-hot-swappable-multi-layer-macropad) by Aaron Broom. We kept the idea of keys sunk into a case with front status lights. We use normal MX switches (Outemu), because Gateron low-profile switches are hard to get in India.
 
 ## Purpose
@@ -14,8 +14,8 @@ There are two layouts, plus two gateways in the same design language:
 
 | Part | Size (mm) | What |
 |------|-----------|------|
-| **HK-4** bar | 112 × 34 × 20.4 (+ keys) | Desk bar. One row of keys with a status column on the right. Key 4 (right) is orange. |
-| **HK-22** square | 53 × 74 × 20.4 (+ keys) | Handheld. 2 × 2 keys with a status row at the back. Key 4 (front right) is orange. |
+| **HK-4** bar | 112 × 34 × 21.4 (+ keys) | Desk bar. One row of keys with a status column on the right. Key 4 (right) is orange. |
+| **HK-22** square | 53 × 74 × 21.2 (+ keys) | Handheld. 2 × 2 keys with a status row at the back. Key 4 (front right) is orange. An ADXL345 senses pick-up, shake and flip. |
 | **Hub** | 38 × 32 × 12 | ESP-NOW gateway: an ESP32-C3 SuperMini on USB power. The board's blue LED shows through a single dot. Snap-fit, no screws. |
 | **LD2410C pod** | 26.4 × 28 × 12.4 | Corner presence sensor that is also the gateway. HLK-LD2410C + SuperMini sandwich behind a 0.8 mm radar window, on an orange corner bracket. |
 | **LD2450 pod** | 48.7 × 28 × 13.6 | The same idea for the HLK-LD2450 tracking radar. |
@@ -32,8 +32,8 @@ Source (one folder, split by job):
 | `test_fit.py` | Interference and fit checks for every assembly: `uv run projects/ha-macropad/test_fit.py` (must print ALL OK) |
 | `print_plan.py` | Slices ready-to-print plates with the quality settings baked in: `uv run projects/ha-macropad/print_plan.py [hk22 hk4]` |
 | `style.py` | Shared look and parts: body, base, V seam, USB-C port, insert bosses, label, interference check |
-| `remote.py` | The remote in both layouts: shell, switch plate, base, the plate snaps and light-sensor cradle, and bought-part models for the fit check |
-| `keycap.py` | Keycap |
+| `remote.py` | The remote in both layouts: shell, switch plate, base, the plate snaps and the snap cradles (light sensor, accelerometer), and bought-part models for the fit check |
+| `keycap.py` | Keycap, with crush ribs in the stem socket |
 | `hub.py`, `radar.py` | Hub; both radar pods and their bracket |
 
 Output (`output/<part>/`, rebuilt by `model.py`; every part is already in print orientation):
@@ -50,7 +50,7 @@ Output (`output/<part>/`, rebuilt by `model.py`; every part is already in print 
 | `hub/hub-shell(-ams).3mf`, `hub/hub-base.3mf` | 1 each | |
 | `ld2410c/` or `ld2450/` `-pod.3mf`, `-bracket.3mf` | 1 each | pod in body colour, bracket orange |
 | `coupon/fit-coupon.3mf` | 1, first | any |
-| `coupon/stem-test.gcode.3mf` | 1, if you already printed the coupon | the coupon's stem half only (10 min) |
+| `coupon/stem-test.gcode.3mf` | 1, **print this first for v0.9** | the coupon's stem half only: 5 posts with crush ribs 00–20 (10 min) |
 | `*-assembly.step` | | for Fusion / FreeCAD |
 
 ## Key dimensions
@@ -61,28 +61,48 @@ Output (`output/<part>/`, rebuilt by `model.py`; every part is already in print 
 | Switch plate hole / plate | 14.0 / 1.6 mm | Cherry MX datasheet: 14.00 ±0.05, plate 1.5 ±0.1. 1.6 is 8 whole layers (a 1.5 mm plate slices to 1.4) and the usual FR4 plate thickness |
 | Plate snaps | 1.0 mm beam, 0.8 mm slot, 28.8 mm free length; barb 0.5 mm past the well wall | design: 0.72 % bending strain when it clicks in |
 | Switch below plate / pins / above / stem / travel | 5.0 / 3.3 / 6.6 / 3.6 / 4.0 mm | Cherry MX datasheet |
+| Switch pins and centre post, trimmed | 1.5 mm below the housing, 0.5 mm for the solder joints under them | design: cut after soldering, so the keys can sit deep in a thin body |
 | Stem socket | cross 4.1 × 1.32 + 0.10 slop (both arms), 4.0 deep, in a Ø5.5 post with a 0.2 mm chamfered tip | Box stems have one thick arm (Kailh spec 1.32, measured 1.30–1.42) and one thin arm (1.10–1.24); Cherry MX 1.31. Keebtalk / Deskthority measurements; slop set by the fit coupon |
+| Crush ribs | 4 half-round ribs, R 0.35, one at each arm end, squeezing 0.10 mm per end (`RIB_GRIP`); 45° lead-in, start 0.4 mm below the mouth | MX stem arms are 4.0 mm long (Cherry datasheet). The sliced G-code keeps them: 0.05–0.11 mm squeeze per end at 0.10 |
 | Switch stem | box stem: the cross stands inside a square rim; the cap's round post goes down inside the rim | the user's Outemu switches (photo, 2026-10-17); box switches take MX caps |
-| Key well | plate 3.0 mm below the deck, 0.8 mm gap round the caps | design |
-| Keycap height above the deck | 3.6 mm at rest, 0.4 mm below the deck when pressed | design (from the MX numbers) |
+| Key well | plate 6.8 mm below the deck, 0.8 mm gap round the caps | design: hides the 6.6 mm switch housings |
+| Keycaps | skirts 0.2 mm below the deck at rest (caps stand 6.8 mm proud), 4.2 mm below when pressed | design (from the MX numbers) |
 | XIAO ESP32-C3 PCB | 21.0 × 17.8 × 1.2 mm | Seeed wiki; thickness community-measured |
 | XIAO USB-C past the PCB edge | 1.5 mm | Seeed KiCad footprint (not printed as a number) |
 | USB-C receptacle face | 0.3 mm inside the port | USB-IF Type-C spec: the plug shell is 6.65 mm and seats fully at 6.2 mm, so the receptacle face may sit at most 0.45 mm in |
 | ESP32-C3 SuperMini PCB | 22.52 × 18.0 mm | vendor drawing |
 | SuperMini USB-C past the PCB edge | 1.0 mm | **guess: measure yours** (`SM_USB_OVERHANG` in `hub.py` and `radar.py`) |
-| LiPo 502540 | 5.3 × 25 × 43 mm modelled (bay 25.2 × 43.2) | name gives the bare cell; the folded protection board adds 2–3 mm |
+| LiPo JYZ-602040 | 6.3 × 20 × 40 mm modelled (bay 20.2 × 40.2), 1.2 mm deep in a pocket in the base | the name gives 6.0 × 20 × 40; 0.3 for tape and swelling. **Measure yours** (`BATT_*` in `remote.py`) |
 | BH1750 module (GY-302) | 18.5 × 13.9 × 1.6 mm; chip 3.0 × 1.6 × 0.75 | seller listing; BH1750FVI datasheet. Chip offset and regulator height are not published |
 | Light-sensor cradle | 0.84 mm beams, 0.4 mm lips, 1.4 mm room over the board (1.2 mm tallest part + 0.2) | design: 1.44 % bending strain when the board clicks in |
 | Buzzer 12085 | Ø12 × 8.5 mm, pins 6.5 mm apart | CEM-1203(42) datasheet |
+| ADXL345 module (GY-291), HK-22 | 28 × 17 × 1.6 mm modelled; 1.3 mm parts on top, 0.6 mm joints underneath | **guess from seller listings (27–28 × 16–17): measure yours** (`ADXL_L`, `ADXL_W` in `remote.py`) |
+| Accelerometer cradle | lips 0.3 mm on the 17 mm short edges, 0.84 mm beams; board top 7.4 mm below the deck | design: 1.36 % bending strain. The header runs along a long edge, so the lips catch the short ones |
 | FPC antenna | 40 × 7.5 mm slim type | see note below |
 | M2 heat-set insert | 3.2 mm hole, 5 mm deep | Ruthex M2: Ø3.6 × 4 mm, hole 3.1–3.2, ≥1.3 mm wall (bosses have 1.6) |
 | M2 countersunk screw | head Ø3.8–4.0, countersink 4.2 | ISO 7046 / DIN 7991 |
 | HLK-LD2410C / LD2450 | 22 × 16 / 44 × 15 mm | Hi-Link manuals |
 | Radar window | 0.8 mm solid PLA | Hi-Link radome guidance: ≤ 1/8 λ thin, or half-wave thick |
 
-**Antenna:** Seeed's current antenna for the XIAO ESP32-C3 (drawing dated 2024-10-08) is a 40 × 20 mm FPC. It is too wide to stand inside the 20 mm-tall body. The model reserves space for a slim 2.4 GHz FPC antenna with a U.FL (IPEX) plug, about 40 × 7.5 mm, stuck to the inside of the front wall (bar) or the right wall (square). Older XIAO antennas, or a slim one from Robu or Amazon.in, fit there. Measure yours; if it differs, change `ANT_L` / `ANT_W` in `remote.py` and run `test_fit.py`.
+**Antenna:** Seeed's current antenna for the XIAO ESP32-C3 (drawing dated 2024-10-08) is a 40 × 20 mm FPC. It is too wide to stand inside the 21 mm-tall body. The model reserves space for a slim 2.4 GHz FPC antenna with a U.FL (IPEX) plug, about 40 × 7.5 mm, stuck to the inside of the front wall (bar) or the right wall (square). Older XIAO antennas, or a slim one from Robu or Amazon.in, fit there. Measure yours; if it differs, change `ANT_L` / `ANT_W` in `remote.py` and run `test_fit.py`.
 
 **Tolerances:** `tolerances.toml` still holds the uncalibrated defaults. Print `calibration/tolerance_coupon` and this project's `fit-coupon` before the full set.
+
+## What changed in v0.9
+
+- **The keycaps were loose.** A light pull took them off. The socket had clearance on every face: 1.42 mm slots for 1.10–1.42 mm arms, and 4.2 mm of length for 4.0 mm arms. So it only gripped if the print came out a little small. The fit coupon's post "10" has the same socket in the sliced G-code (checked layer by layer), so it never tested grip, only how it felt pushing on. Slicing the caps yourself (other walls, other temperature) was enough to lose the grip.
+  - Each arm end now has a crush rib: a small upright half-round that stands 0.10 mm into the stem's path. The stem flattens the ribs the first time the cap goes on, and they hold it from then on.
+  - The cap still goes on either way round: both arms are 4.0 mm long, so all four ribs squeeze the same.
+  - The stem test now varies the squeeze: 00, 05, 10, 15, 20 (hundredths of a millimetre per end). **Test it by pulling, not pushing:** push a post onto a switch, then pull. Pick the smallest number that needs a firm tug to come off but still goes on with your thumb, and set `RIB_GRIP` in `keycap.py`. In the slice, 00 and 05 come out almost without ribs (too small to print), and 10 to 20 come out close to their values.
+  - Print the caps from `print_plan.py`'s files, not your own slice. The fit depends on Arachne walls and 210 °C.
+- **The keys sit deeper.** The clear switch housings stood 3.6 mm above the deck. The plate is now 6.8 mm below the deck instead of 3.0, so the housings hide and the caps' skirts sit just below the deck. The body is only 0.8 mm taller (21.2 mm; HK-4 21.4), and the top of the caps is lower than before:
+  - The battery is now a JYZ-602040 (6 × 20 × 40 mm, 450 mAh). It sits 1.2 mm deep in a pocket in the base, over a 0.8 mm floor.
+  - Cut the switch pins and the plastic centre post to 1.5 mm after soldering, and run the wires in the gaps between the switches (see *Wiring*).
+  - On the HK-4 the engraved name moves right, clear of the battery pocket.
+- **ADXL345 accelerometer (HK-22).** It senses pick-up, shake and face-down flip, and Home Assistant gets them as `esphome.hk_motion` events (see the firmware README).
+  - The GY-291 board lies flat, chip up, in the status row: over the buzzer and the XIAO, under the light sensor. It clicks into a snap cradle like the light sensor's.
+  - It shares the I2C bus with the BH1750. Its interrupt goes to D3 (key 3) through a diode.
+- **Code:** the light sensor's cradle is now a shared `snap_cradle()`, used by both boards.
 
 ## What changed in v0.8
 
@@ -146,11 +166,12 @@ Bought in India; prices are rough, in INR.
 | 1 | slim 2.4 GHz FPC antenna, U.FL / IPEX (≈ 40 × 7.5 mm) | if yours is the 40 × 20 mm one (see above) | 50–100 |
 | 5 | micro LEDs: pre-wired 0603 SMD, or 1.8 mm through-hole, warm white | 4 key dots + charging dot. The pre-wired "model railway" ones often have a 12 V resistor on the lead: cut it off | 150–300 |
 | 5 | resistors: 4 × 470 Ω (white LEDs; 1 kΩ for red or green), 1 × 1 kΩ | LED current, 1–3 mA | 5 |
-| 1 | LiPo 502540, 450 mAh, with protection PCB | measure it: the bay is 25.2 × 43.2 mm. The XIAO charges at 380 mA, so pick a cell rated for 1C | 150–250 |
+| 1 | LiPo JYZ-602040, 450 mAh, with protection PCB | measure it: the bay is 20.2 × 40.2 mm, 6.3 mm of height allowed. The XIAO charges at 380 mA, so pick a cell rated for 1C | 150–250 |
 | 4 | MX-style switches, e.g. Outemu (Cosmic Byte 20-pack) | 3- or 5-pin. Blue = clicky, brown = tactile, red = linear | ≈ 145 / 20 |
 | 1 | passive buzzer 12 × 8.5 mm ("12085") | a magnetic type needs an S8050 NPN + 1 kΩ | 10–20 |
 | 1 | BH1750 light sensor (GY-302), header removed | already have | — |
-| 2 | BAT43 or 1N5819 Schottky diodes | key 4 shares two wake pins | 2–5 |
+| 1 | ADXL345 accelerometer (GY-291), header removed (HK-22) | measure it: the model assumes 28 × 17 mm | 100–200 |
+| 3 | BAT43 or 1N5819 Schottky diodes | key 4 shares two wake pins; the ADXL345's interrupt shares D3 | 3–6 |
 | 2 + 1 | 470 kΩ resistors + 100 nF capacitor | battery voltage divider (about 4 µA) | 2–5 |
 | 4 | M2 heat-set inserts, M2 × 3 or M2 × 4 (Ø3.5–3.6) | | 20–40 |
 | 4 | M2 × 5 (or × 6) countersunk screws | | 10–20 |
@@ -178,6 +199,10 @@ Battery    XIAO BAT+ -> 470k -> D2 (GPIO4) -> 470k -> GND, 100 nF from D2 to GND
 
 Light      BH1750 VCC -> 3V3, GND -> GND, SDA -> D4 (GPIO6), SCL -> D5 (GPIO7), ADDR -> GND
 
+Motion     ADXL345 (GY-291, HK-22) VCC -> 3V3, GND -> GND, SDA -> D4, SCL -> D5 (shared with the BH1750)
+           CS -> 3V3 (I2C mode), SDO -> GND (address 0x53)
+           INT1 -> diode -> D3: striped end towards INT1 (it pulls D3 low, like key 3)
+
 Buzzer     piezo type:    D10 (GPIO10) -> buzzer + ; buzzer - -> GND
            magnetic type: D10 -> 1k -> S8050 base; emitter -> GND; collector -> buzzer - ; buzzer + -> 3V3
 ```
@@ -188,9 +213,10 @@ Notes on the wiring:
 - GPIO2 (D0) is a strapping pin and must be high at reset. Don't hold key 1 or key 4 while plugging in or connecting the battery.
 - GPIO8 and GPIO9 are strapping pins too. With the LEDs wired from 3V3 into the pin (above), they stay high at reset, so boot is not affected.
 - D6 is the UART TX pin, so key 1's dot flickers for a moment at boot. That's normal.
+- Key 3 and the ADXL345's interrupt share D3 through the diode. At every wake the firmware reads the ADXL345 first, to tell them apart, and keeps its interrupt off while it's awake.
 - The LEDs only light while the remote is awake: a short flash for "press sent", and the scene's dot for a second if your firmware reports state. In deep sleep the pins float and the LEDs are off, so battery life doesn't change.
 - Cut the battery plug off and solder the leads to the pads one at a time, so the bare ends never touch. Check the polarity: the XIAO has no reverse protection.
-- Solder wires to the switch pins with the wire running sideways, not straight down. There is 1.5 mm of wiring room under the pins, and 0.3 mm more above the battery.
+- Solder wires to the switch pins with the wire running sideways, not straight down, then cut each pin just below its joint and cut the plastic centre post (and the two plastic pegs of 5-pin switches) to 1.5 mm with flush cutters. Run the wires along the gaps between the switches, not under them: under the joints there is only 0.5 mm, plus 0.3 mm above the battery.
 
 ## How it works
 
@@ -198,6 +224,7 @@ Notes on the wiring:
 |--------|--------|
 | Tap, double-tap or hold (about 1 s) a key | Whatever you mapped in Home Assistant. That key's dot flashes and the buzzer chirps when the gateway confirms |
 | Hold the orange key (4) for 5 s | Off: presses are ignored, for carrying it in a bag. Hold 5 s again to turn it on |
+| Pick it up, shake it, or turn it face down and hold it still (HK-22) | Motion events for Home Assistant: `pickup`, `shake`, `flip` |
 | Plug in USB-C | Charges at 380 mA (a 450 mAh cell takes about 1.5 h). The charging dot is lit until it's full. Works while on or off |
 | Battery below about 3.4 V | Shuts itself off to protect the cell. Charge it to wake it |
 
@@ -211,11 +238,12 @@ as they are:
 
 | File | Process | Time | PLA |
 |------|---------|------|-----|
-| `hk22-all-parts.gcode.3mf` (`print_plan.py hk22 all`) | **every part on one plate**: shell, plate, base, 4 keycaps | 1 h 31 min | 32.0 g |
-| `0_test_plate_keycap.gcode.3mf` (`print_plan.py hk22 test`) | the plate + 1 keycap, to test before the full set | 9 min | 2.5 g |
-| `1_shell.gcode.3mf` | the shell | 49 min | 16.8 g |
-| `2_plate_base.gcode.3mf` | the plate and the plain base | 23 min | 10.5 g |
-| `3_keycaps.gcode.3mf` (× 4) | the keycaps. Set one cap to the orange filament | 18 min | 4.8 g |
+| `coupon/stem-test.gcode.3mf` (`print_plan.py coupon`) | **print this first**: the keycap grip test (see *Fit coupon first*) | 11 min | 2.5 g |
+| `hk22-all-parts.gcode.3mf` (`print_plan.py hk22 all`) | **every part on one plate**: shell, plate, base, 4 keycaps | 1 h 36 min | 32.6 g |
+| `0_test_plate_keycap.gcode.3mf` (`print_plan.py hk22 test`) | the plate + 1 keycap, to test before the full set | 10 min | 2.5 g |
+| `1_shell.gcode.3mf` | the shell | 55 min | 18.4 g |
+| `2_plate_base.gcode.3mf` | the plate and the plain base | 22 min | 9.6 g |
+| `3_keycaps.gcode.3mf` (× 4) | the keycaps. Set one cap to the orange filament | 19 min | 4.8 g |
 
 All of them use 0.20 mm Standard with the changes below. Every height in the model (plate
 seat, snap catches, sensor cradle, keycap socket) sits on a 0.2 mm layer line.
@@ -264,46 +292,51 @@ Standard unless noted:
 | Part | Orientation (as exported) | Time | PLA | Notes |
 |------|--------------------------|------|-----|-------|
 | fit coupon | flat | 14 min | 5.3 g | print first |
-| HK-4 shell | deck on the bed | 36 min at 0.16 mm (32 min at 0.20) | 17.6 g | textured PEI gives the top its matte finish. 0.16 mm layers show fewer lines on the walls. Seam: back |
+| HK-4 shell (v0.8) | deck on the bed | 36 min at 0.16 mm (32 min at 0.20) | 17.6 g | textured PEI gives the top its matte finish. 0.16 mm layers show fewer lines on the walls. Seam: back |
 | HK-4 plate | top on the bed | 3 min | 1.1 g | |
 | HK-4 base | flat | 16 min | 9.0 g | AMS: label in white or black (the first 2 layers swap) |
 | keycap × 4 | top on the bed, open side up | 4–5 min each | 1.2 g each | flat top: nothing special to set |
-| HK-22 shell / base | as above | 30 / 16 min | 16.3 / 9.3 g | |
+| HK-22 shell / base (v0.8) | as above | 30 / 16 min | 16.3 / 9.3 g | v0.9 times are in the table above |
 | hub shell / base | deck down / flat | 9 / 10 min | 4.6 / 3.4 g | the clips stand upright: print the base about 220 °C for good layer bonding |
 | LD2410C pod / bracket | window down / flat bottom | 10 / 18 min | 3.6 / 6.5 g | |
 | LD2450 pod / bracket | window down / flat bottom | 13 / 22 min | 6.2 / 10.9 g | |
 
-A full HK-4 from `print_plan.py` is about 1 h 40 min and 33 g. Elsewhere, use 3 Arachne walls and 15% infill, with no supports and no brim. The bed edges of the shells, plates, bases, keycaps and radar pods are chamfered, so leave elephant-foot compensation at the preset.
+A full HK-4 from `print_plan.py` is about 1 h 39 min and 34 g (v0.9). Elsewhere, use 3 Arachne walls and 15% infill, with no supports and no brim. The bed edges of the shells, plates, bases, keycaps and radar pods are chamfered, so leave elephant-foot compensation at the preset.
 
 ### Fit coupon first
 
 - **Switch holes (14.0 / 14.1 / 14.2):** pick the one where a switch clicks in firmly without wobbling. Set `SWITCH_HOLE` in `remote.py`. Result on this A1 (2026-10-17): 14.0 fits firmly, so `SWITCH_HOLE = 14.0`. The next coupon prints 13.9 / 14.0 / 14.1.
-- **Keycap posts (labelled 00–20 = slop 0.00–0.20 mm):** turn the bar over and push each
-  post onto a switch. It goes down inside the square rim round the cross. Pick the snuggest
-  one that goes on fully without forcing, and set `STEM_SLOP` in `keycap.py`. Result on
-  the Outemu box stems (2026-10-17): 10 fits snugly, so `STEM_SLOP = 0.10`. If no post
+- **Keycap posts (labelled 00–20 = crush-rib squeeze 0.00–0.20 mm per arm end, v0.9):**
+  turn the bar over and push each post onto a switch, down inside the square rim round the
+  cross. Then **pull it off**. Pick the smallest number that needs a firm tug to come off
+  but still goes on fully with your thumb, and set `RIB_GRIP` in `keycap.py`. If no post
   goes into the rim, the rim is smaller than 5.5 mm: lower `STEM_D` to 5.3. If you have
   already printed the coupon, print only `coupon/stem-test.gcode.3mf`.
+  - Before v0.9 the posts varied the slop instead (no ribs). On the Outemu box stems
+    (2026-10-17), slop 10 felt snug pushing on, so `STEM_SLOP = 0.10`. But caps with that
+    socket came off with a light pull: see *What changed in v0.9*.
 
 ## Assembly (remote)
 
 1. **Measure, then re-export if anything differs.** You'll need your battery, antenna and BH1750 board (chip position: `BH_CHIP_DX`, tallest part: `BH_TALL`). Run `model.py` and `test_fit.py`.
 2. Press the 4 heat-set inserts into the corner bosses (iron at about 220 °C).
 3. Push each micro LED up into its light tube from inside, so it shines through the dot. Fix it with a drop of glue, and run its leads along the deck.
-4. Clip the 4 switches into the plate, outside the shell, and wire them (see *Wiring*).
+4. Clip the 4 switches into the plate, outside the shell, wire them, and trim the pins and centre posts to 1.5 mm (see *Wiring*).
    - Turn each switch so its two clips face the plate edges **without** slots: front and back
      on the HK-22, left and right on the HK-4. The slotted edges are the snap beams.
    - Feed the wires down through the well. Push the plate straight down until both sides
      click. It rests on the 45° ledge and the barbs hold it down.
    - To take it out, open the base. From inside, press each barb inwards through the pocket
      under the well wall, and push the plate up.
-5. Push the BH1750, chip up, straight up into its cradle under the light window until both lips click under it. The wires leave from the short end. Stick the antenna to the inside of the front wall (bar) or right wall (square), and plug it into the XIAO's U.FL socket.
+5. Push the BH1750, chip up, straight up into its cradle under the light window until both lips click under it. The wires leave from the short end.
+   On the HK-22, then push the ADXL345, chip up and header edge towards the keys, up into its cradle below until both lips click under its short edges. Bridge CS to VCC and SDO to GND on the board.
+   Stick the antenna to the inside of the front wall (bar) or right wall (square), and plug it into the XIAO's U.FL socket.
 6. In the base:
-   - Stick the battery in its bay with foam tape, leads towards the XIAO.
+   - Press the battery into its pocket with a strip of foam tape, leads towards the XIAO.
    - Push the XIAO back in its cradle until its USB-C sits in the port, 0.3 mm short of the outside, and fix it with a dab of hot glue.
    - Trim the buzzer pins to about 1.5 mm, solder its wires and set it in its seat. The wires run along the groove to the XIAO.
 7. Flash the firmware over USB-C. Put the base on, fit the 4 screws, and stick the feet over them.
-8. Push the keycaps on, with the orange one at position 4. The post goes inside the square rim round the cross, either way round.
+8. Push the keycaps on, with the orange one at position 4. The post goes inside the square rim round the cross, either way round. The first push is firm: the stem flattens the crush ribs.
 
 ## Hub and radar pods
 
@@ -328,6 +361,8 @@ All of these are parameters at the top of `remote.py` (or `style.py` for the sha
 - `SWITCH_HOLE`, `PLATE_CLEAR`: switch fit, plate fit.
 - `BATT_*`, `BOARD_*`, `BH_*`, `BUZ_*`, `ANT_*`: bought-part sizes. `test_fit.py` re-checks them.
 - `SNAP_BARB`: how far the plate's barbs reach. If the plate is hard to push in, lower it by 0.1. If it still lifts, raise it by 0.1.
+- `RIB_GRIP` in `keycap.py`: how hard the keycaps grip. From the stem test.
+- `ADXL_L`, `ADXL_W`, `ADXL_LIP`: the accelerometer and its cradle (HK-22).
 - `BH_LIP`, `BH_ROOM`: the light-sensor cradle. If the board won't go up far enough to click, its tallest part is taller than 1.2 mm: raise `BH_ROOM`.
 - `R_CORNER`, `TOP_CHAMFER`, `SEAM_CHAMFER`, `BASE` (stripe thickness) in `style.py`.
 
@@ -336,4 +371,5 @@ All of these are parameters at the top of `remote.py` (or `style.py` for the sha
 | Date | Version | Result | Change for next |
 |------|---------|--------|-----------------|
 | 2026-10-17 | v0.7 (HK-22) | Printed. Poor surface quality, with small gaps here and there. The plate had nothing holding it in the shell, and nothing held the light sensor | v0.8: plate snaps, sensor cradle, 1.6 mm plate, 14.0 mm switch holes (coupon), sliced files with Arachne walls and a slow first layer |
-| | v0.8 | not printed yet | |
+| 2026-10-20 | v0.8 (HK-22) | Reported: keycaps came off with a light pull (caps sliced in Bambu Studio by hand, not from `print_plan.py`) | v0.9: crush ribs in the socket, stem test by pull; ADXL345 added |
+| | v0.9 | not printed yet | |

@@ -64,7 +64,7 @@ globals:
   - id: hk_last_packet_ms
     type: uint32_t
     initial_value: "0"
-  - id: hk_fire             # set by the parser: 1 = press, 2 = status
+  - id: hk_fire             # set by the parser: 1 = press, 2 = status, 3 = motion
     type: uint8_t
     initial_value: "0"
   - id: hk_key
@@ -72,6 +72,8 @@ globals:
   - id: hk_press
     type: std::string
   - id: hk_status
+    type: std::string
+  - id: hk_motion
     type: std::string
   - id: hk_remote_id
     type: uint8_t
@@ -139,6 +141,14 @@ espnow:
               id(hk_status) = STATUS[s];
               id(hk_fire) = 2;
               ESP_LOGI("hk", "remote %s", STATUS[s]);
+            } else if (type == 4) {  // motion (ADXL345)
+              static const char *const MOTION[] = {"", "pickup", "shake", "flip"};
+              const uint8_t m = data[7];
+              if (m < 1 || m > 3) return;
+              id(hk_motion_event)->trigger(MOTION[m]);
+              id(hk_motion) = MOTION[m];
+              id(hk_fire) = 3;
+              ESP_LOGI("hk", "remote %s", MOTION[m]);
             }
         - if:
             condition:
@@ -160,6 +170,16 @@ espnow:
                   data:
                     status: !lambda "return id(hk_status);"
                     remote: !lambda "return to_string(id(hk_remote_id));"
+        - if:
+            condition:
+              lambda: "return id(hk_fire) == 3;"
+            then:
+              - homeassistant.event:
+                  event: esphome.hk_motion
+                  data:
+                    motion: !lambda "return id(hk_motion);"
+                    remote: !lambda "return to_string(id(hk_remote_id));"
+              - script.execute: hk_led_flash
   on_broadcast:
     # The remote broadcasts only while it looks for the gateway's channel.
     - then: *hk_packet
@@ -200,6 +220,11 @@ event:
     name: "Keys 3+4"
     device_class: button
     event_types: [single, double, long]
+  - platform: template
+    id: hk_motion_event
+    name: "Motion"
+    device_class: motion
+    event_types: [pickup, shake, flip]
 
 sensor:
   - platform: template

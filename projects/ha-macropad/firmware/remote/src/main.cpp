@@ -4,6 +4,10 @@
 // a two-key combo, or key 4 held 5 s), sends it over ESP-NOW to the gateway, flashes the
 // key's dot and chirps when the gateway confirms, then sleeps again. A timer wake every
 // REPORT_EVERY_S reads the BH1750 and the battery and reports them when they change.
+//
+// With an ADXL345 (HK-22) it also wakes on motion: picked up after lying still, shaken, or
+// turned face down and held still. Its interrupt shares D3 with key 3 through a diode, so it
+// is read and cleared first thing at every wake, and kept off while we're awake.
 // All settings are in config.h; the radio format is in hk_protocol.h.
 
 #include <Arduino.h>
@@ -13,6 +17,7 @@
 #include <soc/usb_serial_jtag_struct.h>
 #include <sys/time.h>
 
+#include "accel.h"
 #include "config.h"
 #include "fx.h"
 #include "hk_protocol.h"
@@ -162,6 +167,8 @@ radio::Result transmit(const hk::Msg &m, bool scan_allowed = true) {
     wake = (rtc.off ? keys::PIN_A : keys::ALL) & ~rtc.stuck;
     timer_s = rtc.stuck ? STUCK_CHECK_S : rtc.off ? OFF_REPORT_S : REPORT_EVERY_S;
   }
+  // The accelerometer can only wake us through D3: standby whenever D3 isn't a wake pin.
+  accel::sleep(!(wake & keys::PIN_C) || rtc.off ? accel::OFF : rtc.watch_move ? accel::MOVE : accel::STILL);
   // Wake pins keep their pull-up. The rest get a pull-down, which draws nothing whether
   // the key is up or held down (keys switch to GND).
   const uint8_t bits[] = {keys::PIN_A, keys::PIN_B, keys::PIN_C};
@@ -271,6 +278,72 @@ void handle(const keys::Gesture &g) {
   }
 }
 
+// ---- Motion (ADXL345) ----------------------------------------------------------
+
+void send_motion(uint8_t kind) {
+  // A pickup happens on every lift: no sound, and no radio search if the hub is away.
+  const bool quiet = kind == hk::M_PICKUP;
+  switch (transmit(make_msg(hk::T_MOTION, 0, kind), !quiet)) {
+    case radio::OK:
+      if (!quiet) show_confirm(0b1111);
+      if (rtc.dots_feature) dots_until = millis() + DOTS_WAIT_MS;
+      break;
+    case radio::NO_HA:
+      if (!quiet) show_no_ha(0b1111);
+      break;
+    case radio::FAIL:
+      if (!quiet) show_no_gateway(0b1111);
+      break;
+  }
+}
+
+// Watch for SHAKE_WINDOW_MS at 100 Hz. A key press ends it: the key wins.
+bool shaken() {
+  accel::Shake shake;
+  accel::fast();
+  const uint32_t t0 = millis();
+  uint32_t last = 0;
+  while (millis() - t0 < SHAKE_WINDOW_MS) {
+    idle();
+    if (!keys::idle()) return false;
+    const uint32_t now = millis();
+    if (now - last < 10) continue;
+    last = now;
+    accel::G g;
+    if (accel::read(g)) shake.add(g);
+    if (shake.reversals() >= SHAKE_REVERSALS) return true;
+  }
+  return false;
+}
+
+void motion_wake(uint8_t woke) {
+  const uint32_t now = now_s();
+  if (woke & accel::INACT) {  // still again: put down, or held still
+    accel::G g;
+    if (accel::read(g)) {
+      LOG("still: up axis %.2f g\n", g.z);
+      rtc.rest_s = g.z > LEVEL_G ? max<uint32_t>(now, 1) : 0;
+      // Face down and still in the hand. Lying face down on a table presses the keys: no flip.
+      if (g.z < -FLIP_G && !keys::raw()) send_motion(hk::M_FLIP);
+    }
+    rtc.watch_move = true;
+    return;
+  }
+  // Moved after lying still (ACT), or jolted in the hand (TAP)
+  const bool pickup = (woke & accel::ACT) && rtc.rest_s && now - rtc.rest_s >= PICKUP_REST_S;
+  rtc.rest_s = 0;
+  rtc.watch_move = false;
+  if (pickup) {
+    radio::start();                             // ready for the first key press
+    fx::pulse(0b1111, 0, 150, 600, 400, 0.5f);  // the dots wake up with it
+  }
+  if (shaken())
+    send_motion(hk::M_SHAKE);
+  else if (pickup)
+    send_motion(hk::M_PICKUP);
+  LOG("moved: pickup=%d\n", pickup);
+}
+
 void interactive(bool cold) {
   if (cold) {
     show_sweep(true);
@@ -319,7 +392,7 @@ void setup() {
 #endif
 
   const esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
-  const uint8_t wake_pins =
+  uint8_t wake_pins =
       cause == ESP_SLEEP_WAKEUP_GPIO ? keys::from_gpio_mask(esp_sleep_get_gpio_wakeup_status()) : 0;
 
   bool cold = rtc.magic != RTC_MAGIC;
@@ -330,7 +403,11 @@ void setup() {
   }
   keys::begin(rtc.stuck);
   fx::begin();
-  LOG("wake cause=%d pins=%u cold=%d\n", cause, wake_pins, cold);
+  // Before anything reads the keys: what did the accelerometer see? Reading it clears its
+  // interrupt, so if D3 is high now, it was the accelerometer that pulled it low, not key 3.
+  const uint8_t woke = accel::begin();
+  if (woke && !(keys::raw() & keys::PIN_C)) wake_pins &= ~keys::PIN_C;
+  LOG("wake cause=%d pins=%u motion=%u cold=%d\n", cause, wake_pins, woke, cold);
 
   // Battery first, before the radio loads the cell.
   rtc.batt_mv = sensors::battery_mv();
@@ -354,7 +431,17 @@ void setup() {
     sleep_now();
   }
 
-  // A key woke us (or this is a fresh boot).
+  if (cause == ESP_SLEEP_WAKEUP_GPIO && !wake_pins) {  // the accelerometer woke us, not a key
+    if (woke && !rtc.off) {
+      fx::set_scale(dot_scale());
+      motion_wake(woke);
+    }
+    interactive(false);  // a key pressed meanwhile; otherwise straight back to sleep
+    sleep_now();
+  }
+
+  // A key woke us (or this is a fresh boot): the remote is in the hand.
+  rtc.watch_move = false;
   sensors::lux_start();  // ready in 180 ms, in time to dim the confirmation flash
   fx::set_scale(dot_scale());
   keys::seed(wake_pins);

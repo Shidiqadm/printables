@@ -1,6 +1,7 @@
 """Slice ready-to-print Bambu Lab A1 plates for an HK remote, with the quality settings baked in.
 
 Run:  uv run projects/ha-macropad/print_plan.py [hk22 | hk4] [test | all]   (after model.py; default hk22)
+      uv run projects/ha-macropad/print_plan.py coupon   the stem test, output/coupon/stem-test.gcode.3mf
 Out:  projects/ha-macropad/output/<slug>/print/
         1_shell.gcode.3mf         the shell, deck on the bed
         2_plate_base.gcode.3mf    switch plate + base (plain base: no AMS label swap)
@@ -84,13 +85,19 @@ def test_plate(slug: str) -> dict:
                                     [(o / f"{slug}-plate.stl", 1), (o / f"{slug}-keycap.stl", 1)], SHELL)}
 
 
+def coupon() -> dict:
+    """The stem test alone, with the keycaps' settings, so its sockets print like theirs."""
+    return {"stem-test": ("0.20mm Standard @BBL A1", [(OUT / "coupon" / "stem-test.stl", 1)], SHELL)}
+
+
 def main() -> None:
     slug = next((a for a in sys.argv[1:] if a in ("hk22", "hk4")), "hk22")
     test, every = "test" in sys.argv[1:], "all" in sys.argv[1:]
-    out = OUT / slug / "print"
+    stems = "coupon" in sys.argv[1:]
+    out = OUT / "coupon" if stems else OUT / slug / "print"
     out.mkdir(parents=True, exist_ok=True)
     total_min = total_g = 0.0
-    chosen = test_plate(slug) if test else all_parts(slug) if every else plates(slug)
+    chosen = coupon() if stems else test_plate(slug) if test else all_parts(slug) if every else plates(slug)
     for name, (process, parts, extra) in chosen.items():
         missing = [p for p, _ in parts if not p.exists()]
         if missing:
@@ -105,7 +112,8 @@ def main() -> None:
         total_g += r.grams
         print(f"{name}: {r}")
     h, m = divmod(round(total_min), 60)
-    print(f"total {'test' if test else 'for one ' + slug}: {h}h{m:02d}m, {total_g:.0f} g PLA")
+    what = "stem test" if stems else "test" if test else "for one " + slug
+    print(f"total {what}: {h}h{m:02d}m, {total_g:.0f} g PLA")
 
 
 if __name__ == "__main__":

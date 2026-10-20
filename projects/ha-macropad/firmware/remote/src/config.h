@@ -16,10 +16,10 @@
 
 #define PIN_KEY_A 2    // D0: key 1, and key 4 through a diode
 #define PIN_KEY_B 3    // D1: key 2, and key 4 through a diode
-#define PIN_KEY_C 5    // D3: key 3
+#define PIN_KEY_C 5    // D3: key 3, and the ADXL345's INT1 through a diode
 #define PIN_BATT 4     // D2: battery divider, 470k / 470k
-#define PIN_SDA 6      // D4: BH1750
-#define PIN_SCL 7      // D5: BH1750
+#define PIN_SDA 6      // D4: BH1750 and ADXL345
+#define PIN_SCL 7      // D5: BH1750 and ADXL345
 #define PIN_BUZZER 10  // D10: passive buzzer
 
 // LED cathode side of each key dot (D6, D7, D8, D9). The pin sinks the current: LOW = on.
@@ -63,6 +63,24 @@ static const uint8_t PIN_DOT[4] = {21, 20, 8, 9};
 #define BATT_SHUTDOWN_MV 3400    // switch off to protect the cell
 #define BATT_RESUME_MV 3700      // charging lifts the cell above this: wake up again
 #define SHUTDOWN_CHECK_S 1800
+
+// ---- Motion (ADXL345, HK-22) ---------------------------------------------------
+
+// 1 = an ADXL345 is fitted. The firmware also checks that one answers, so a remote without
+// it works either way; 0 skips the check.
+#define HK_ACCEL 1
+#define ACCEL_Z_UP 1          // +1: chip side towards the deck (the HK-22 cradle); -1: upside down
+
+#define ACCEL_MOVE_MG 250     // lying still: a tilt of about 15 degrees or a push wakes us
+#define ACCEL_STILL_MG 190    // in the hand: below this for ACCEL_STILL_S counts as still
+#define ACCEL_STILL_S 1
+#define ACCEL_JOLT_MG 2500    // in the hand: a jolt this hard may be a shake, so look closer
+#define PICKUP_REST_S 10      // "pickup" only after lying level and face up this long
+#define SHAKE_WINDOW_MS 900   // after a wake, watch this long for a shake
+#define SHAKE_G 1.2f          // a swing past this (gravity taken away) counts...
+#define SHAKE_REVERSALS 3     // ...and this many changes of direction make a shake
+#define FLIP_G 0.75f          // face down: the up axis reads below -FLIP_G
+#define LEVEL_G 0.9f          // lying level, face up: the up axis reads above this
 
 // ---- Feedback ----------------------------------------------------------------
 
